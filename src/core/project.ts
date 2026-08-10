@@ -14,7 +14,7 @@ import { mcpHttpRoutes, type ServerIdentity } from '../mcp/index.ts'
 import { policyTools } from '../mcp/policy.ts'
 import { buildResources, type Resource } from '../mcp/resources.ts'
 import { realtime } from '../realtime/index.ts'
-import { initTracing } from '../tracing.ts'
+import { httpTracing, initTracing } from '../tracing.ts'
 import { buildTools, type Tool } from '../mcp/tools.ts'
 import { generateOpenApi, renderDocs, type OpenApiDocument } from '../openapi/index.ts'
 import { joinPath, Router } from '../routing/router.ts'
@@ -198,6 +198,9 @@ export async function createApp(rawSettings: Settings, options: BuildOptions = {
   for (const app of settings.apps) await app.ready?.()
 
   const elysia = new Elysia({ name: 'angus' })
+
+  // Outermost, so every other span in the request lands beneath it.
+  if (settings.tracing !== false) elysia.use(httpTracing())
 
   elysia.use(errorTranslation({ debug: settings.debug }))
 

@@ -48,10 +48,10 @@ is a no-op costing one branch, and the framework keeps its two runtime
 dependencies. Ask for tracing without the SDK installed and it says so at
 startup, rather than leaving you wondering why the traces are empty.
 
-Angus does not open a span for the HTTP request itself: Elysia's hooks observe
-a request but cannot wrap one, and a root span has to wrap. The standard OTel
-HTTP instrumentation does that properly and these spans attach beneath it —
-the architecture's own rule applied to tracing.
+The root span comes from Elysia's `.wrap()`, which is a higher-order function
+over the composed handler rather than a lifecycle hook — it runs before
+`onRequest` and after the response is built, so it genuinely encloses the
+request and everything else nests beneath it.
 
 Request logs now carry the trace ID when one is recording, which is what makes
 logs and traces usable together.

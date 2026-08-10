@@ -198,3 +198,128 @@ describe('with a tracer', () => {
     expect(ends).toBe(1)
   })
 })
+
+describe('the request span', () => {
+  test('wraps the whole request, so other spans nest beneath it', async () => {
+    const { Elysia } = await import('elysia')
+    const { httpTracing, traceQuery } = await import('./tracing.ts')
+
+    const spans: { name: string; ended: boolean }[] = []
+    const nested: string[] = []
+
+    _setTracer({
+      startActiveSpan<T>(name: string, _options: any, fn: (span: any) => T): T {
+        const recorded = { name, ended: false }
+        spans.push(recorded)
+        nested.push(`open:${name}`)
+
+        return fn({
+          setAttribute: () => {},
+          setStatus: () => {},
+          recordException: () => {},
+          end: () => {
+            recorded.ended = true
+            nested.push(`close:${name}`)
+          },
+        })
+      },
+    })
+
+    const app: any = new Elysia().use(httpTracing() as any).get('/posts/:id', async () => {
+      await traceQuery('select', 'posts', undefined, async () => null)
+      return { ok: true }
+    })
+
+    const response = await app.handle(new Request('http://localhost/posts/7'))
+    expect(response.status).toBe(200)
+
+    // The request span opens first and closes last — that is what makes the
+    // query span its child rather than a sibling. It opens before routing, so
+    // it is named by path here and renamed to the pattern afterwards.
+    expect(nested[0]).toBe('open:GET /posts/7')
+    expect(nested[nested.length - 1]).toBe('close:GET /posts/7')
+    expect(nested).toContain('open:db.select posts')
+  })
+
+  test('is renamed to the route pattern once routing has happened', async () => {
+    const { Elysia } = await import('elysia')
+    const { httpTracing } = await import('./tracing.ts')
+
+    // A real SDK span supports updateName. The span has to open before routing
+    // — `.wrap()` receives the raw Request — so the pattern is applied after.
+    const finalNames: string[] = []
+    _setTracer({
+      startActiveSpan<T>(name: string, _options: any, fn: (span: any) => T): T {
+        let current = name
+        return fn({
+          setAttribute: () => {},
+          setStatus: () => {},
+          recordException: () => {},
+          updateName: (next: string) => (current = next),
+          end: () => finalNames.push(current),
+        })
+      },
+    })
+
+    const app: any = new Elysia().use(httpTracing() as any).get('/posts/:id', () => ({ ok: true }))
+    await app.handle(new Request('http://localhost/posts/1'))
+    await app.handle(new Request('http://localhost/posts/2'))
+
+    // Two ids must not be two operations, or grouping by name is useless.
+    expect(finalNames).toEqual(['GET /posts/:id', 'GET /posts/:id'])
+  })
+
+  test('falls back to the path when the span cannot be renamed', async () => {
+    const { Elysia } = await import('elysia')
+    const { httpTracing } = await import('./tracing.ts')
+
+    // updateName is optional on the Span interface, so a minimal stand-in must
+    // not break the request.
+    const names: string[] = []
+    _setTracer({
+      startActiveSpan<T>(name: string, _options: any, fn: (span: any) => T): T {
+        names.push(name)
+        return fn({ setAttribute: () => {}, setStatus: () => {}, recordException: () => {}, end: () => {} })
+      },
+    })
+
+    const app: any = new Elysia().use(httpTracing() as any).get('/posts/:id', () => ({ ok: true }))
+    expect((await app.handle(new Request('http://localhost/posts/1'))).status).toBe(200)
+    expect(names).toEqual(['GET /posts/1'])
+  })
+
+  test('a 500 marks the span failed, even though Elysia never throws it', async () => {
+    const { Elysia } = await import('elysia')
+    const { httpTracing } = await import('./tracing.ts')
+
+    let status: { code: number; message?: string } | undefined
+    _setTracer({
+      startActiveSpan<T>(_name: string, _options: any, fn: (span: any) => T): T {
+        return fn({
+          setAttribute: () => {},
+          setStatus: (next: any) => (status = next),
+          recordException: () => {},
+          end: () => {},
+        })
+      },
+    })
+
+    const app: any = new Elysia().use(httpTracing() as any).get('/boom', () => {
+      throw new Error('boom')
+    })
+
+    // Elysia turns the throw into a Response, so the status is the only signal.
+    expect((await app.handle(new Request('http://localhost/boom'))).status).toBe(500)
+    expect(status?.code).toBe(2)
+  })
+
+  test('costs nothing when tracing is off', async () => {
+    const { Elysia } = await import('elysia')
+    const { httpTracing } = await import('./tracing.ts')
+
+    _setTracer(null)
+    const app: any = new Elysia().use(httpTracing() as any).get('/', () => ({ ok: true }))
+
+    expect((await app.handle(new Request('http://localhost/'))).status).toBe(200)
+  })
+})

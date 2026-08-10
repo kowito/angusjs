@@ -206,7 +206,7 @@ The admin fails closed rather than open: with no configured permissions it serve
 | Schema language | TypeBox | It is what Elysia validates with, so sharing it means one schema, not two. |
 | HTTP, routing, lifecycle | Elysia | The whole premise. |
 | Password hashing | Bun | `Bun.password` is argon2id; a dependency would be worse. |
-| Trace collection and export | OpenTelemetry SDK | Angus emits spans through `@opentelemetry/api` when it is installed, and is a no-op when it is not. The HTTP root span belongs to the standard instrumentation — Elysia's hooks observe a request but cannot wrap one, and a root span has to wrap. |
+| Trace collection and export | OpenTelemetry SDK | Angus emits spans through `@opentelemetry/api` when it is installed, and is a no-op when it is not. The root span comes from Elysia's `.wrap()`, which is a higher-order function over the composed handler rather than a lifecycle hook, so it genuinely encloses the request. |
 
 Angus adds two runtime dependencies of its own: `drizzle-orm` and `elysia`.
 

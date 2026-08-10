@@ -80,7 +80,9 @@ Structured JSON logs with a request ID on every line, and the trace ID when one 
 tracing: {}   // needs @opentelemetry/api and an SDK
 ```
 
-Spans cover services and queries. Angus does not open a span for the HTTP request itself: Elysia's hooks observe a request but cannot wrap one, and a root span has to wrap — the standard OTel HTTP instrumentation does that properly, and these spans attach beneath it.
+Spans cover the request, the services it called, and the queries those caused. The root span comes from Elysia's `.wrap()`, which is a higher-order function over the composed handler rather than a lifecycle hook, so it encloses the whole request.
+
+Request spans are named by route pattern rather than URL. `/posts/1` and `/posts/2` being two operations would make grouping by span name useless exactly when it is needed — so the span opens named by path (routing has not happened yet) and is renamed once it has.
 
 ## Databases
 

@@ -11,6 +11,10 @@
  * lets `db` report spans without inverting the dependency direction the
  * architecture depends on.
  *
+ * The root span comes from Elysia's `.wrap()`, which is a higher-order function
+ * over the composed handler rather than a lifecycle hook — so it genuinely
+ * spans the request, from before `onRequest` to after the response is built.
+ *
  * `@opentelemetry/api` is an optional peer dependency, loaded at startup and
  * only if present. That is deliberate: tracing is not something every
  * application wants, the API package pulls a real dependency tree behind it,
@@ -34,28 +38,17 @@ export interface TracingOptions {
   enabled?: boolean
 }
 
-/**
- * Angus does not open a span for the HTTP request itself.
- *
- * Elysia's lifecycle hooks observe a request; they cannot wrap one, and a root
- * span has to wrap. The standard OpenTelemetry HTTP instrumentation already
- * does that job properly, and the spans here attach beneath whatever root is
- * active — which is the architecture's own rule applied to tracing: if the
- * platform solves it, integrate rather than rebuild.
- *
- * What Angus contributes is the middle and the bottom of the tree: the service
- * named in the application's vocabulary, and the queries it caused.
- */
-
 /** The subset of the OTel API this uses, so the absence of it stays typed. */
 interface Tracer {
   startActiveSpan<T>(name: string, options: unknown, fn: (span: Span) => T): T
 }
 
-interface Span {
+export interface Span {
   setAttribute(key: string, value: string | number | boolean): void
   setStatus(status: { code: number; message?: string }): void
   recordException(error: unknown): void
+  /** Present on a real SDK span; absent on a minimal stand-in. */
+  updateName?(name: string): void
   end(): void
 }
 
@@ -135,11 +128,18 @@ export function _setTracer(next: Tracer | null): void {
  * The no-tracer path returns `fn()` directly rather than wrapping it, so an
  * application without OpenTelemetry pays one comparison and not a promise.
  */
-export function trace<T>(name: string, attributes: Record<string, string | number | boolean>, fn: () => T): T {
+export function trace<T>(
+  name: string,
+  attributes: Record<string, string | number | boolean>,
+  fn: () => T,
+  onSpan?: (span: Span) => void,
+): T {
   const active = tracer
   if (!active) return fn()
 
   return active.startActiveSpan(name, { attributes }, (span) => {
+    onSpan?.(span)
+
     let settled = false
 
     const fail = (error: unknown) => {
@@ -193,4 +193,96 @@ export function traceQuery<T>(operation: string, table: string, statement: strin
 /** Traces an application service, which is the layer between route and query. */
 export function traceService<T>(name: string, fn: () => T): T {
   return trace(`service ${name}`, { 'angus.service': name }, fn)
+}
+
+// ---------------------------------------------------------------------------
+// The request span
+// ---------------------------------------------------------------------------
+
+/**
+ * Opens a span around the whole request.
+ *
+ * `.wrap()` is the only part of Elysia's surface that can do this: the
+ * lifecycle hooks observe a request at points, whereas a root span has to
+ * enclose one. Everything the service and query layers report lands underneath
+ * this, which is what turns a list of spans into a tree.
+ *
+ * The route pattern is used as the span name rather than the URL. A trace UI
+ * groups by name, and `/posts/1`, `/posts/2` and `/posts/3` being three
+ * different operations makes the grouping useless exactly when it is needed.
+ */
+export function httpTracing(): (app: any) => any {
+  // Keyed by the Request, because `.wrap()` receives the raw Request rather
+  // than a context — routing has not happened yet when the span opens.
+  const spans = new WeakMap<Request, Span>()
+
+  return (app) =>
+    app
+      .wrap((composed: (request: Request) => unknown) => async (request: Request) => {
+        if (!tracer) return composed(request)
+
+        let span: Span | undefined
+
+        return trace(
+          `${request.method} ${pathOf(request)}`,
+          {
+            'http.request.method': request.method,
+            'url.path': pathOf(request),
+          },
+          async () => {
+            const response = await composed(request)
+
+            // Elysia turns a thrown error into a Response rather than letting
+            // it propagate, so the status is the only place a failure shows up.
+            if (response instanceof Response && span) {
+              span.setAttribute('http.response.status_code', response.status)
+              if (response.status >= 500) {
+                span.setStatus({ code: STATUS_ERROR, message: `HTTP ${response.status}` })
+              }
+            }
+
+            return response
+          },
+          (opened) => {
+            span = opened
+            spans.set(request, opened)
+          },
+        )
+      })
+      // Runs inside the wrap, once the route is known. Renaming here rather
+      // than naming by URL is what keeps `/posts/1` and `/posts/2` one
+      // operation instead of two — a trace UI groups by span name, and
+      // unbounded names make the grouping useless exactly when it is needed.
+      .onAfterHandle({ as: 'global' }, (context: any) => {
+        const route = context.route as string | undefined
+        if (!route) return
+
+        const span = spans.get(context.request as Request)
+        span?.updateName?.(`${(context.request as Request).method} ${route}`)
+        span?.setAttribute('http.route', route)
+      })
+}
+
+function pathOf(request: Request | undefined): string {
+  if (!request) return '/'
+  try {
+    return new URL(request.url).pathname
+  } catch {
+    return '/'
+  }
+}
+
+/**
+ * Sets an attribute on whatever span is currently active.
+ *
+ * Needs the real SDK: finding the active span goes through OpenTelemetry's
+ * context manager, which is what propagates it across awaits.
+ */
+export function setAttribute(key: string, value: string | number | boolean): void {
+  api?.trace.getActiveSpan()?.setAttribute(key, value)
+}
+
+/** Marks the active span as failed without throwing. */
+export function setError(message: string): void {
+  api?.trace.getActiveSpan()?.setStatus({ code: STATUS_ERROR, message })
 }
