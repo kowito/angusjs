@@ -12,6 +12,7 @@ import { page } from '../html.ts'
 import { consoleAuditSink, jsonlAuditSink, type AuditSink } from '../mcp/audit.ts'
 import { mcpHttpRoutes, type ServerIdentity } from '../mcp/index.ts'
 import { policyTools } from '../mcp/policy.ts'
+import { realtime } from '../realtime/index.ts'
 import { buildTools, type Tool } from '../mcp/tools.ts'
 import { generateOpenApi, renderDocs, type OpenApiDocument } from '../openapi/index.ts'
 import { joinPath, Router } from '../routing/router.ts'
@@ -186,6 +187,23 @@ export async function createApp(rawSettings: Settings, options: BuildOptions = {
 
   const mcp = mcpRoutes(settings, rawSettings, () => elysia)
   if (mcp) elysia.use(mcp)
+
+  // Mounted before `authenticate`, because a WebSocket upgrade never reaches
+  // the request lifecycle that populates `context.user` — the connection
+  // resolves its own user from the upgrade request instead.
+  if (settings.realtime) {
+    const options = settings.realtime
+    elysia.use(
+      realtime({
+        ...options,
+        authenticate:
+          options.authenticate ??
+          (rawSettings.authenticate
+            ? (request) => rawSettings.authenticate!({ request, headers: request.headers } as any)
+            : undefined),
+      }),
+    )
+  }
 
   for (const plugin of settings.middleware) elysia.use(plugin)
 

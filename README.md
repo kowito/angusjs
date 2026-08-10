@@ -631,3 +631,35 @@ Angus is not trying to replace Elysia. It is an application layer built on top o
 ## Licence
 
 MIT
+
+## Realtime
+
+Elysia already provides WebSockets. What a channel adds is the part that isn't
+about sockets: what the event means, and who is allowed to hear it.
+
+```ts
+export const orderEvents = defineChannel<OrderEvent>('orders', {
+  authorize: (user) => Boolean(user),
+  filter: (event, user) => (event.customerId === user.id ? event : null),
+})
+
+await orderEvents.publish({ customerId: 12, status: 'shipped' })
+```
+
+Publishing is a plain call, so a view, a job and a model hook all reach it the
+same way. `broadcastOnWrite(Order, orderEvents)` wires it to the ORM.
+
+Enable the transports in settings:
+
+```ts
+realtime: { path: '/events' }
+```
+
+Clients get a WebSocket at `/events` — send `{ action: 'subscribe', channel }` —
+and Server-Sent Events at `/events/stream?channel=orders` for the many cases
+that only need to receive.
+
+The default broker is in-process, which is correct for one server and wrong for
+two: a second instance has its own bus. `setBroker()` takes a Redis or NATS
+implementation without any application code changing.
+

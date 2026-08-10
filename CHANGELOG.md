@@ -5,6 +5,26 @@ contain breaking changes; those are listed first in each entry.
 
 ## Unreleased
 
+### Added — realtime application events
+
+Elysia already provides WebSockets, so this is the layer above one. What an
+application wants to say is "this order shipped, and the people allowed to know
+are the customer and the warehouse" — a statement about the domain, not about
+sockets. Left to the transport, that rule gets written once per connection
+handler and again for every other way the event needs to go out.
+
+`defineChannel` names an event and decides who may listen. Publishing is a
+function call from anywhere; the sockets are a consumer of it rather than where
+it lives. `broadcastOnWrite(Model, channel)` wires it to the ORM, and
+`filter` narrows one channel per subscriber.
+
+Two transports: a WebSocket at `realtime.path`, and SSE at `${path}/stream` for
+clients that only need to receive — it reconnects on its own and passes through
+proxies that mishandle upgrades.
+
+The default broker is in-process, which is correct for one server and wrong for
+two. `setBroker()` replaces it without any application code changing.
+
 ### Added — agent policy, confirmation and audit
 
 Route permissions already stop an agent exceeding the person operating it,

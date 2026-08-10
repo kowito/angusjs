@@ -26,6 +26,7 @@
     "./openapi": "./src/openapi/index.ts",
     "./client": "./src/client/index.ts",
     "./mcp": "./src/mcp/index.ts",
+    "./realtime": "./src/realtime/index.ts",
     "./testing": "./src/testing/index.ts",
     "./http": "./src/http/index.ts",
     "./env": "./src/core/env.ts"
