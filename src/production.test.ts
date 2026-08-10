@@ -200,6 +200,28 @@ describe('throttling', () => {
     }
   })
 
+  test('unmatched routes are not throttled — a documented limitation', async () => {
+    // The limiter runs in `resolve`, which Elysia only calls for a matched
+    // route. Endpoint scanning is therefore not slowed down; the endpoints
+    // that exist are still protected, which is the point. Pinned here so the
+    // behaviour is a known property rather than a surprise.
+    const app = new Elysia()
+      .use(throttle({ limit: 2, windowSeconds: 60, store: new MemoryThrottleStore() }))
+      .get('/real', () => ({ ok: true }))
+
+    const matched: number[] = []
+    for (let attempt = 0; attempt < 4; attempt++) {
+      matched.push((await app.handle(new Request('http://test/real'))).status)
+    }
+    expect(matched).toEqual([200, 200, 429, 429])
+
+    const unmatched: number[] = []
+    for (let attempt = 0; attempt < 4; attempt++) {
+      unmatched.push((await app.handle(new Request('http://test/does-not-exist'))).status)
+    }
+    expect(unmatched).toEqual([404, 404, 404, 404])
+  })
+
   test('the memory store expires its counters', () => {
     const store = new MemoryThrottleStore()
     expect(store.hit('k', 2, 1).allowed).toBe(true)

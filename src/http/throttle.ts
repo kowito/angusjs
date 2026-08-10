@@ -7,6 +7,15 @@
  * one process and a documented lie for more than one — `angus check --deploy`
  * says so rather than letting it be discovered in an incident.
  *
+ * One limitation, deliberate and tested: the limiter runs in `resolve`, which
+ * Elysia only invokes for a **matched** route. Requests to paths that don't
+ * exist return 404 without consuming quota, so this does not slow down someone
+ * scanning for endpoints. It protects the endpoints you have — which is what
+ * brute-force protection is for — and a 404 flood is better absorbed at the
+ * edge (CDN, load balancer) than by application code. Running in `onRequest`
+ * instead would cover 404s but could not key a limit by authenticated user,
+ * since identity is not resolved yet.
+ *
  * The algorithm is a fixed window. It admits a burst at a window boundary
  * (up to 2× the limit across two adjacent windows); a sliding log would be
  * exact but keeps every timestamp. For protecting a login endpoint and holding

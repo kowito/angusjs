@@ -354,7 +354,7 @@ export default defineSettings({
 
 **Health probes are split on purpose.** `/healthz` (liveness) never touches the database — if it did, a database blip would fail every replica at once and the orchestrator would restart them all, turning a recoverable outage into a total one. `/readyz` (readiness) does check, so an instance that can't serve is pulled from the pool without being killed.
 
-**Rate limiting defaults to production only.** Five login attempts per five minutes is right against credential stuffing and wrong while you're building the login form.
+**Rate limiting defaults to production only.** Five login attempts per five minutes is right against credential stuffing and wrong while you're building the login form. It applies to matched routes, so it protects the endpoints you have; a flood of 404s is better absorbed at the edge than in application code.
 
 **Graceful shutdown** drains in-flight requests before closing, so a rolling deploy doesn't return 502s for requests that were already in progress.
 
