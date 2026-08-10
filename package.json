@@ -20,6 +20,7 @@
     "./auth": "./src/auth/index.ts",
     "./email": "./src/email/index.ts",
     "./jobs": "./src/jobs/index.ts",
+    "./storage": "./src/storage/index.ts",
     "./admin": "./src/admin/index.ts",
     "./openapi": "./src/openapi/index.ts",
     "./client": "./src/client/index.ts",

@@ -6,3 +6,5 @@ node_modules/
 .env
 generated-live.ts
 .client-check/
+storage-test
+.storage-test/

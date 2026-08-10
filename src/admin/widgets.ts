@@ -60,6 +60,10 @@ export function displayValue(spec: FieldSpec, value: unknown): Html {
       return html`<code>${JSON.stringify(value).slice(0, 80)}</code>`
     case 'url':
       return html`<a href="${String(value)}" rel="noreferrer noopener">${String(value)}</a>`
+    case 'image':
+    case 'file':
+      // The column holds a key, which on its own tells a human nothing.
+      return html`<code>${String(value)}</code>`
     case 'email':
       return html`<a href="mailto:${String(value)}">${String(value)}</a>`
     default: {
@@ -162,6 +166,12 @@ export function widget(options: WidgetOptions): Html {
 
     case 'time':
       return html`<input type="time" id="${id}" name="${name}" value="${inputValue(spec, value)}"${required}>`
+
+    case 'file':
+    case 'image':
+      // A text input holding the storage key: the file itself is uploaded
+      // through the upload endpoint, which keeps this form a plain form.
+      return html`<input type="text" id="${id}" name="${name}" value="${inputValue(spec, value)}" placeholder="storage key"${required}>`
 
     case 'email':
       return html`<input type="email" id="${id}" name="${name}" value="${inputValue(spec, value)}"${

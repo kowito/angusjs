@@ -107,6 +107,24 @@ export {
 } from './jobs/index.ts'
 export type { EnqueueOptions, JobDefinition, JobRow, QueueStats, RunResult, Worker, WorkerOptions } from './jobs/index.ts'
 
+// File storage
+export {
+  contentTypeFor,
+  fileUrl,
+  getStorage,
+  localStorage,
+  memoryStorage,
+  s3Storage,
+  safeKey,
+  setStorage,
+  uniqueKey,
+  upload,
+  UploadError,
+  IMAGE_TYPES,
+} from './storage/index.ts'
+export type { StorageBackend, StorageSettings, StoredFile, UploadOptions } from './storage/index.ts'
+export { storageRoutes } from './storage/routes.ts'
+
 // Email
 export {
   consoleBackend,

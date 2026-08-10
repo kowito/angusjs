@@ -282,6 +282,24 @@ Ambient, so a query several frames deep — inside a service, inside a model hoo
 
 `F()` refers to a column's own value, so `update({ views: F('views').add(1) })` becomes `SET views = views + 1` and concurrent increments don't lose each other.
 
+### File storage
+
+```ts
+avatar: f.image({ maxBytes: 2 * 1024 * 1024, uploadTo: 'avatars' })
+```
+
+```ts
+storage: { backend: s3Storage({ bucket: 'uploads', publicUrl: 'https://cdn.example.com' }) }
+```
+
+The column stores a **key**, not the bytes — so rows stay small, a CDN is possible, and moving from local disk to S3 is a configuration change rather than a migration. `f.file()` and `f.image()` are IR field kinds, so validation, the admin widget and the OpenAPI schema follow from the one declaration.
+
+Uploads get their own endpoint rather than multipart on every write: a client uploads, receives a key, and sends the key in an ordinary JSON body. That keeps the OpenAPI document and the generated client free of multipart, and a large file never blocks a small write.
+
+Backends: `localStorage()`, `s3Storage()` (S3, R2, MinIO — via Bun's built-in client, so no AWS SDK and real presigned URLs), and `memoryStorage()` for tests.
+
+> Path traversal is handled by making it inexpressible rather than detectable: `safeKey()` strips every separator and dot-segment, and the local backend re-checks the resolved path against its root anyway.
+
 ### Background jobs
 
 ```ts

@@ -5,6 +5,24 @@ contain breaking changes; those are listed first in each entry.
 
 ## Unreleased
 
+### Added — file storage
+
+`f.file()` and `f.image()` as IR field kinds, so validation, the admin widget
+and the OpenAPI schema all follow from one declaration — and the conformance
+suite covers them like every other kind.
+
+The column holds a storage **key**, not bytes: rows stay small, a CDN becomes
+possible, and moving from local disk to S3 is configuration rather than schema.
+Backends are `localStorage()`, `s3Storage()` (via Bun's built-in S3 client, so
+no AWS SDK and real presigned URLs) and `memoryStorage()` for tests.
+
+Uploads use a dedicated endpoint rather than multipart on every write, which
+keeps JSON endpoints — and the generated client — free of multipart.
+
+Path traversal is made inexpressible rather than detectable: `safeKey()` strips
+every separator and dot-segment, and the local backend re-checks the resolved
+path against its root regardless.
+
 ### Added — background jobs
 
 `job()`, `enqueue()`, `schedule()`, `startWorker()` and `angus worker`.

@@ -14,6 +14,7 @@ import type { CorsOptions, CsrfOptions, SecurityHeaderOptions } from '../http/se
 import type { ThrottleOptions } from '../http/throttle.ts'
 import type { HealthOptions, ObservabilityOptions } from './observability.ts'
 import type { EmailSettings } from '../email/index.ts'
+import type { StorageSettings } from '../storage/index.ts'
 
 export interface ServerSettings {
   port?: number
@@ -100,6 +101,8 @@ export interface Settings {
    * which is right in development and reported by `angus check --deploy`.
    */
   email?: EmailSettings
+  /** Where uploaded files go. Without it, `f.file()` columns cannot be written. */
+  storage?: StorageSettings
 }
 
 export interface SecuritySettings {

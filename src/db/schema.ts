@@ -63,6 +63,8 @@ function sqliteColumn(name: string, spec: FieldSpec): any {
     case 'url':
     case 'uuid':
     case 'time':
+    case 'file':
+    case 'image':
       return sqliteText(name)
     // SQLite has no fixed-point type; text round-trips the exact digits.
     case 'decimal':
@@ -94,6 +96,8 @@ function postgresColumn(name: string, spec: FieldSpec): any {
     case 'email':
     case 'slug':
     case 'url':
+    case 'file':
+    case 'image':
       return spec.maxLength ? varchar(name, { length: spec.maxLength }) : pgText(name)
     case 'text':
       return pgText(name)

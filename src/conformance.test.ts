@@ -51,6 +51,8 @@ const CASES: Case[] = [
   { kind: 'datetime', field: f.datetime(), sample: new Date('2026-01-02T03:04:00Z'), formValue: '2026-01-02T03:04' },
   { kind: 'time', field: f.time(), sample: '12:30', formValue: '12:30' },
   { kind: 'json', field: f.json<{ a: number }>(), sample: { a: 1 }, formValue: '{"a":1}' },
+  { kind: 'file', field: f.file(), sample: 'docs/report-ab12cd34.pdf', formValue: 'docs/report-ab12cd34.pdf' },
+  { kind: 'image', field: f.image(), sample: 'avatars/me-ab12cd34.png', formValue: 'avatars/me-ab12cd34.png' },
   { kind: 'foreignKey', field: f.foreignKey(() => Target), sample: 3, formValue: '3' },
 ]
 
@@ -58,7 +60,7 @@ const CASES: Case[] = [
 const ALL_KINDS: FieldKind[] = [
   'auto', 'bigAuto', 'char', 'text', 'email', 'slug', 'url', 'uuid',
   'integer', 'smallInteger', 'bigInteger', 'float', 'decimal', 'boolean',
-  'date', 'datetime', 'time', 'json', 'foreignKey',
+  'date', 'datetime', 'time', 'json', 'file', 'image', 'foreignKey',
 ]
 
 describe('coverage', () => {

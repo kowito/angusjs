@@ -28,6 +28,8 @@ export type FieldKind =
   | 'datetime'
   | 'time'
   | 'json'
+  | 'file'
+  | 'image'
   | 'foreignKey'
 
 export type OnDelete = 'cascade' | 'restrict' | 'set null' | 'no action'
@@ -63,6 +65,12 @@ export interface FieldSpec {
   autoNowAdd?: boolean
   verboseName?: string
   helpText?: string
+  /** Maximum upload size in bytes, for file and image fields. */
+  maxBytes?: number
+  /** Accepted content types, for file and image fields. `image/*` allowed. */
+  accept?: readonly string[]
+  /** Storage folder for uploads. */
+  uploadTo?: string
   /** Foreign key target, lazy so models can reference each other circularly. */
   to?: () => AnyModel
   onDelete?: OnDelete
@@ -276,6 +284,31 @@ export function time<const O extends BaseOptions<string>>(opts: O = {} as O): Fi
   return new Field(base('time', opts))
 }
 
+export interface FileOptions extends BaseOptions<string> {
+  /** Maximum size in bytes. Falls back to the project-wide limit. */
+  maxBytes?: number
+  /** Accepted content types. `['application/pdf']`, `['image/*']`. */
+  accept?: readonly string[]
+  /** Folder within the storage backend. */
+  uploadTo?: string
+  maxLength?: number
+}
+
+/**
+ * A stored file. The column holds the storage **key**, not the bytes, so rows
+ * stay small and moving from local disk to S3 is a configuration change.
+ */
+export function file<const O extends FileOptions>(opts: O = {} as O): Field<string, MetaOf<O>> {
+  return new Field(base('file', { maxLength: 500, ...opts }))
+}
+
+/** A file constrained to image types, which also tells the admin to preview it. */
+export function image<const O extends FileOptions>(opts: O = {} as O): Field<string, MetaOf<O>> {
+  return new Field(
+    base('image', { maxLength: 500, accept: ['image/*'], ...opts }),
+  )
+}
+
 export function json<T = unknown, const O extends BaseOptions<T> = BaseOptions<T>>(
   opts: O = {} as O,
 ): Field<T, MetaOf<O>> {
@@ -325,6 +358,8 @@ export const f = {
   date,
   time,
   json,
+  file,
+  image,
   foreignKey,
   oneToOne,
 }

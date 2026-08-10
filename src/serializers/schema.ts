@@ -98,6 +98,16 @@ function baseSchema(spec: FieldSpec, mode: SchemaMode): TSchema {
         ? t.String({ ...notes, format: spec.kind === 'date' ? 'date' : 'date-time' })
         : t.Date(notes)
 
+    case 'file':
+    case 'image':
+      // The wire value is the storage key. A client uploads separately and
+      // sends the key back, which keeps JSON endpoints free of multipart.
+      return t.String({
+        ...notes,
+        maxLength: spec.maxLength,
+        description: notes.description ?? `Storage key for the uploaded ${spec.kind}.`,
+      })
+
     case 'json':
       // `t.Any()` alone serialises to `{}`, which is valid JSON Schema but
       // tells an OpenAPI reader or an agent nothing at all. A description
