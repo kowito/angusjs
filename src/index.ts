@@ -86,6 +86,23 @@ export type { AngusPluginOptions, McpPluginOptions } from './plugin.ts'
 export { errorTranslation, ERROR_CODES, codeForStatus } from './core/errors.ts'
 export type { ErrorCode } from './core/errors.ts'
 
+// Email
+export {
+  consoleBackend,
+  createMailer,
+  EmailError,
+  getMailer,
+  httpBackend,
+  memoryBackend,
+  nullBackend,
+  passwordResetEmail,
+  renderEmail,
+  sendEmail,
+  setMailer,
+  verificationEmail,
+} from './email/index.ts'
+export type { EmailBackend, EmailMessage, EmailSettings, Mailer, MemoryBackend, SendResult } from './email/index.ts'
+
 // Admin
 export { AdminSite, adminSite } from './admin/index.ts'
 export type { AdminSiteOptions, ModelAdminOptions } from './admin/index.ts'

@@ -13,6 +13,7 @@ import type { AngusApp } from './app.ts'
 import type { CorsOptions, CsrfOptions, SecurityHeaderOptions } from '../http/security.ts'
 import type { ThrottleOptions } from '../http/throttle.ts'
 import type { HealthOptions, ObservabilityOptions } from './observability.ts'
+import type { EmailSettings } from '../email/index.ts'
 
 export interface ServerSettings {
   port?: number
@@ -94,6 +95,11 @@ export interface Settings {
   observability?: ObservabilitySettings | false
   throttle?: ThrottleSettings | false
   health?: HealthSettings | false
+  /**
+   * Outgoing mail. Without it, messages print to stderr rather than sending —
+   * which is right in development and reported by `angus check --deploy`.
+   */
+  email?: EmailSettings
 }
 
 export interface SecuritySettings {

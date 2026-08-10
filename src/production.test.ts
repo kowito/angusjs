@@ -375,6 +375,16 @@ describe('deployment audit', () => {
     expect(findings.some((finding) => finding.id === 'auth-app-without-hook' && finding.severity === 'error')).toBe(true)
   })
 
+  test('flags an email backend that silently does not send', async () => {
+    const { memoryBackend } = await import('./email/index.ts')
+    const findings = deployChecks({
+      ...settings,
+      debug: false,
+      email: { backend: memoryBackend(), from: 'a@b.c' },
+    })
+    expect(findings.some((finding) => finding.id === 'email-backend-not-sending')).toBe(true)
+  })
+
   test('a clean configuration produces no errors', () => {
     const findings = deployChecks({
       ...settings,
@@ -382,6 +392,7 @@ describe('deployment audit', () => {
       database: { dialect: 'postgres', url: 'postgres://x' },
       throttle: { store: new MemoryThrottleStore() },
       mcp: { readOnly: true },
+      email: { backend: { name: 'smtp', send: async () => [] }, from: 'a@b.c' },
     })
     expect(hasBlockingFindings(findings)).toBe(false)
   })

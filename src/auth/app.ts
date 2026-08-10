@@ -27,6 +27,7 @@ import {
   setPassword,
   touchSession,
 } from './credentials.ts'
+import { passwordResetEmail, sendEmail } from '../email/index.ts'
 import { isAuthenticated } from './permissions.ts'
 import { Session, User } from './models.ts'
 
@@ -115,10 +116,20 @@ export interface AuthAppOptions {
   /** Adds `Secure` to the cookie. Defaults to on outside development. */
   secureCookies?: boolean
   /**
-   * Delivers a password-reset link. Until an email backend exists, a project
-   * supplies this; without one the token is returned only in development.
+   * Overrides delivery of the reset link. By default the configured email
+   * backend sends the built-in template, so this is only needed for a custom
+   * message or a different channel.
    */
-  sendPasswordReset?: (input: { user: { id: number; email: string }; token: string }) => Promise<void> | void
+  sendPasswordReset?: (input: { user: { id: number; email: string }; token: string; url: string }) => Promise<void> | void
+  /**
+   * Where the reset link points. `{token}` is substituted.
+   * Defaults to `<siteUrl>/reset-password?token={token}`.
+   */
+  passwordResetUrl?: string
+  /** Absolute base URL, used to build links in emails. */
+  siteUrl?: string
+  /** Product name, shown in emails. */
+  siteName?: string
   /** Where the admin login form redirects after success. Defaults to `/admin`. */
   adminPath?: string
 }
@@ -305,10 +316,21 @@ export function authApp(options: AuthAppOptions = {}): AngusApp {
 
         if (user?.isActive) {
           const token = await issueVerificationToken(user.id, 'password-reset')
+          const base = options.siteUrl ?? Bun.env.SITE_URL ?? ''
+          const url = (options.passwordResetUrl ?? `${base}/reset-password?token={token}`).replace(
+            '{token}',
+            encodeURIComponent(token),
+          )
+
           if (options.sendPasswordReset) {
-            await options.sendPasswordReset({ user: { id: user.id, email: user.email }, token })
-          } else if (Bun.env.NODE_ENV !== 'production') {
-            console.warn(`angus auth: no sendPasswordReset configured. Reset token for ${user.email}: ${token}`)
+            await options.sendPasswordReset({ user: { id: user.id, email: user.email }, token, url })
+          } else {
+            const template = passwordResetEmail({ resetUrl: url, siteName: options.siteName })
+            // Failures are logged, not surfaced: telling the caller that
+            // delivery failed for *this* address confirms the account exists.
+            await sendEmail({ to: user.email, ...template }).catch((error) => {
+              console.error('angus auth: could not send the password reset email.', error)
+            })
           }
         }
 

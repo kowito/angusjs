@@ -282,6 +282,27 @@ Ambient, so a query several frames deep — inside a service, inside a model hoo
 
 `F()` refers to a column's own value, so `update({ views: F('views').add(1) })` becomes `SET views = views + 1` and concurrent increments don't lose each other.
 
+### Email
+
+```ts
+email: {
+  backend: httpBackend({ apiKey: process.env.RESEND_API_KEY! }),
+  from: 'Acme <no-reply@acme.com>',
+}
+```
+
+Four backends, chosen for the two states a project is actually in. `consoleBackend()` prints to stderr — the default, because "the reset link never arrived" is a much worse first hour than a noisy terminal. `memoryBackend()` collects into an outbox so tests can assert without a mock. `httpBackend()` sends via a provider API (Resend by default, any other through `body`). `nullBackend()` accepts and discards.
+
+```ts
+const outbox = memoryBackend()
+// ... trigger a password reset ...
+expect(outbox.lastTo('ada@example.com')!.subject).toContain('Reset')
+```
+
+`redirectTo` diverts every message to one address, keeping the originals in `X-Original-To` — the safety catch for staging against a copy of production data. Password reset uses this automatically, so it works out of the box.
+
+> **SMTP is not included.** A correct client means STARTTLS, several AUTH mechanisms, line folding and dot-stuffing, none of which could be verified here — and a client that drops mail silently is worse than an honest gap. `EmailBackend` is a single method, so adding one is small and local.
+
 ### Admin
 
 Register a model and get a working CRUD interface at `/admin` — tables, search, filters, sorting, pagination, and add/change/delete forms, all derived from the same field specs.

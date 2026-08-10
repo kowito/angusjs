@@ -5,6 +5,30 @@ contain breaking changes; those are listed first in each entry.
 
 ## Unreleased
 
+### Added — email
+
+Four backends: `consoleBackend()` (stderr, the default), `memoryBackend()` (an
+assertable outbox for tests), `httpBackend()` (Resend by default, other
+providers through `body`), and `nullBackend()`.
+
+`redirectTo` diverts every recipient to one address while recording the
+originals in `X-Original-To` — the safety catch for staging against a copy of
+production data.
+
+**Password reset now sends itself.** It previously needed a `sendPasswordReset`
+callback; the built-in template goes through the configured backend, and a
+delivery failure is logged rather than surfaced, because a 500 there would
+confirm the account exists.
+
+SMTP is deliberately absent: a correct client means STARTTLS, several AUTH
+mechanisms, line folding and dot-stuffing, none of which could be verified here.
+A client that drops mail silently is worse than an honest gap, and
+`EmailBackend` is one method.
+
+`angus check --deploy` now flags an unconfigured backend, and a `console`,
+`memory` or `null` backend in production — all of which accept mail and send
+nothing.
+
 ### Added — typed client
 
 **`angus client`** generates a typed fetch client from the same route

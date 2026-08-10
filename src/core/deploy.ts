@@ -173,6 +173,30 @@ export function deployChecks(rawSettings: Settings, options: DeployCheckOptions 
     }
   }
 
+  // --- email ---------------------------------------------------------------
+
+  const backendName = settings.email?.backend?.name
+  if (!settings.email?.backend) {
+    add(
+      hasAuthApp ? 'error' : 'warning',
+      'email-not-configured',
+      'No email backend is configured, so messages print to stderr instead of being sent.' +
+        (hasAuthApp ? ' Password reset will not reach anyone.' : ''),
+      "Set `email: { backend: httpBackend({ apiKey: ... }), from: '...' }`.",
+    )
+  } else if (backendName === 'console' || backendName === 'memory' || backendName === 'null') {
+    add(
+      'error',
+      'email-backend-not-sending',
+      `The "${backendName}" email backend does not send anything.`,
+      'Use a real backend in production.',
+    )
+  }
+
+  if (settings.email?.backend && !settings.email.from) {
+    add('warning', 'email-no-sender', 'No default sender is configured.', 'Set `email.from`.')
+  }
+
   // --- observability -------------------------------------------------------
 
   if (settings.health === false) {

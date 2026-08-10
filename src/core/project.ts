@@ -19,6 +19,7 @@ import { health, observability } from './observability.ts'
 import { cors, csrf, securityHeaders } from '../http/security.ts'
 import { defaultThrottleRules, throttle } from '../http/throttle.ts'
 import { disconnect } from '../db/connection.ts'
+import { createMailer, setMailer } from '../email/index.ts'
 import { resolveSettings, type ResolvedSettings, type Settings, type ThrottleSettings } from './settings.ts'
 
 export interface BuildOptions {
@@ -133,6 +134,9 @@ export async function createApp(rawSettings: Settings, options: BuildOptions = {
   if (settings.database && options.connectDatabase !== false && !hasConnection()) {
     await connect(settings.database, appModels(settings.apps))
   }
+
+  // Installed before `ready()`, so an app can send during startup.
+  setMailer(createMailer(settings.email ?? {}))
 
   for (const app of settings.apps) await app.ready?.()
 
