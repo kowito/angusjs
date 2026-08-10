@@ -295,10 +295,17 @@ describe('tools/list and tools/call', () => {
     expect(await Crate.objects.filter({ label: 'Cherries' }).exists()).toBe(true)
   })
 
-  test('a delete removes the row', async () => {
-    const { body } = await call('crate-destroy', { id: 1 })
+  test('a delete removes the row, once confirmed', async () => {
+    const { body } = await call('crate-destroy', { id: 1, confirm: true })
     expect(body.result.isError).toBe(false)
     expect(await Crate.objects.filter({ id: 1 }).exists()).toBe(false)
+  })
+
+  test('a delete without confirmation leaves the row alone', async () => {
+    const { body } = await call('crate-destroy', { id: 1 })
+    expect(body.result.isError).toBe(true)
+    expect(body.result.content[0].text).toMatch(/without confirmation/i)
+    expect(await Crate.objects.filter({ id: 1 }).exists()).toBe(true)
   })
 })
 

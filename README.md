@@ -543,6 +543,7 @@ Both commands are configuration-only — no server, no database writes — so th
 | `angus startapp <name>` | Scaffold an app inside the project |
 | `angus generate crud <app> <Name>` | Scaffold a model with its API and admin |
 | `angus seed` | Run the project's seed script |
+| `angus mcp install` | Register the project with an agent client |
 | `angus runserver` | Development server |
 | `angus makemigrations` | Generate migrations from your models |
 | `angus migrate [--check\|--dry-run]` | Apply migrations; verify or preview them |

@@ -8,6 +8,8 @@
 
 import type { Elysia } from 'elysia'
 import type { DatabaseConfig } from '../db/connection.ts'
+import type { AuditSink } from '../mcp/audit.ts'
+import type { ToolPolicy } from '../mcp/policy.ts'
 import type { Context, Permission } from '../routing/router.ts'
 import type { AngusApp } from './app.ts'
 import type { CorsOptions, CsrfOptions, SecurityHeaderOptions } from '../http/security.ts'
@@ -59,6 +61,20 @@ export interface McpSettings {
   allowedOrigins?: readonly string[]
   /** Gate the endpoint itself, on top of each route's own permissions. */
   permissions?: Permission[]
+  /**
+   * What the agent may do, which is usually less than its user may do.
+   *
+   * Route permissions already stop an agent exceeding the person operating it.
+   * This narrows it further — "may read orders and issue refunds, may not
+   * delete customers" — and decides which operations need explicit
+   * confirmation before they run.
+   */
+  policy?: ToolPolicy
+  /**
+   * Where a record of every tool call goes: a path for JSONL, a sink of your
+   * own, or `true` for a file in production and the console in development.
+   */
+  audit?: AuditSink | string | boolean
 }
 
 export interface Settings {

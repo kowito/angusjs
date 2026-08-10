@@ -13,6 +13,8 @@
  */
 
 import type { Elysia } from 'elysia'
+import { emitAudit, fingerprint, redact, type AuditEvent, type AuditSink } from './audit.ts'
+import { checkConfirmation, needsConfirmation, type ToolPolicy } from './policy.ts'
 import { callTool, toDefinition, type Tool } from './tools.ts'
 
 export const PROTOCOL_VERSION_KEY = 'io.modelcontextprotocol/protocolVersion'
@@ -81,7 +83,15 @@ export interface ServerIdentity {
 export interface DispatchContext {
   /** The app tool calls are dispatched through. */
   app: Elysia<any, any>
+  /** The tools this server serves — already filtered by policy. */
   tools: Tool[]
+  /**
+   * What this agent may do. Exposure is applied when the tool list is built,
+   * so what remains here is the confirmation requirement.
+   */
+  policy?: ToolPolicy
+  /** Where the record of each call goes. */
+  audit?: AuditSink
   identity: ServerIdentity
   /** Origin used to build the synthetic request URL. */
   origin?: string
@@ -188,8 +198,35 @@ async function callToolMessage(
 
   const tool = context.tools.find((candidate) => candidate.name === name)
   if (!tool) {
-    // An unknown tool is a protocol error, not a tool failure.
+    // An unknown tool is a protocol error, not a tool failure. A tool the
+    // policy withheld is indistinguishable from one that never existed, which
+    // is the intent: an agent cannot probe for what it is not allowed to see.
     return failure(id, JSON_RPC_ERRORS.invalidParams, `Unknown tool: ${String(name)}`)
+  }
+
+  const started = performance.now()
+  const actor = fingerprint(context.headers)
+  const record = (outcome: AuditEvent['outcome'], status: number | null, detail?: string) =>
+    emitAudit(context.audit, {
+      at: new Date().toISOString(),
+      tool: tool.name,
+      args: redact(args) as Record<string, unknown>,
+      status,
+      outcome,
+      duration: Math.round(performance.now() - started),
+      actor,
+      ...(detail ? { detail } : {}),
+    })
+
+  // Checked before dispatch, so an unconfirmed destructive call never reaches
+  // the database at all.
+  if (needsConfirmation(tool, context.policy)) {
+    const refusal = checkConfirmation(tool, args)
+    if (refusal) {
+      context.policy?.onRefusal?.({ tool: tool.name, reason: 'unconfirmed', detail: refusal })
+      record('refused', null, refusal)
+      return result(id, { content: [{ type: 'text', text: refusal }], isError: true })
+    }
   }
 
   try {
@@ -198,11 +235,12 @@ async function callToolMessage(
     // A non-2xx from the API is a *tool execution* error: the model should see
     // it and adapt, not have the whole RPC fail.
     if (call.status >= 400) {
-      return result(id, {
-        content: [{ type: 'text', text: describeFailure(call.status, call.body, call.text) }],
-        isError: true,
-      })
+      const detail = describeFailure(call.status, call.body, call.text)
+      record('error', call.status, detail)
+      return result(id, { content: [{ type: 'text', text: detail }], isError: true })
     }
+
+    record('ok', call.status)
 
     const text = call.text === '' ? `${call.status} No Content` : call.text
     const payload: Record<string, unknown> = {
@@ -221,10 +259,9 @@ async function callToolMessage(
 
     return result(id, payload)
   } catch (error) {
-    return result(id, {
-      content: [{ type: 'text', text: error instanceof Error ? error.message : String(error) }],
-      isError: true,
-    })
+    const detail = error instanceof Error ? error.message : String(error)
+    record('error', null, detail)
+    return result(id, { content: [{ type: 'text', text: detail }], isError: true })
   }
 }
 

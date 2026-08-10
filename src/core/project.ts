@@ -9,7 +9,9 @@
 import { Elysia } from 'elysia'
 import { connect, hasConnection } from '../db/connection.ts'
 import { page } from '../html.ts'
+import { consoleAuditSink, jsonlAuditSink, type AuditSink } from '../mcp/audit.ts'
 import { mcpHttpRoutes, type ServerIdentity } from '../mcp/index.ts'
+import { policyTools } from '../mcp/policy.ts'
 import { buildTools, type Tool } from '../mcp/tools.ts'
 import { generateOpenApi, renderDocs, type OpenApiDocument } from '../openapi/index.ts'
 import { joinPath, Router } from '../routing/router.ts'
@@ -22,7 +24,7 @@ import { disconnect } from '../db/connection.ts'
 import { createMailer, setMailer } from '../email/index.ts'
 import { setStorage } from '../storage/index.ts'
 import { createCache, setCache } from '../cache/index.ts'
-import { resolveSettings, type ResolvedSettings, type Settings, type ThrottleSettings } from './settings.ts'
+import { resolveSettings, type McpSettings, type ResolvedSettings, type Settings, type ThrottleSettings } from './settings.ts'
 
 export interface BuildOptions {
   /** Skip opening the database — useful when a test already connected one. */
@@ -77,7 +79,11 @@ export function projectTools(rawSettings: Settings): Tool[] {
   const settings = resolveSettings(rawSettings)
   const mcp = settings.mcp === false ? {} : (settings.mcp ?? {})
   const routes = projectRouter(settings.apps, settings.prefix).flatten()
-  return buildTools(routes, { include: mcp.include, exclude: mcp.exclude, readOnly: mcp.readOnly })
+  const tools = buildTools(routes, { include: mcp.include, exclude: mcp.exclude, readOnly: mcp.readOnly })
+
+  // Exposure is decided here, once, rather than per call: a tool the policy
+  // withholds is absent from `tools/list` and unreachable by name.
+  return policyTools(tools, mcp.policy)
 }
 
 /** Name and version reported to MCP clients. */
@@ -96,6 +102,18 @@ export function mcpIdentity(rawSettings: Settings): ServerIdentity {
 }
 
 /**
+ * `audit: true` means "somewhere sensible": a file in production, where the
+ * record has to outlive the process, and the console in development, where
+ * seeing the call as it happens is what is actually wanted.
+ */
+function resolveAuditSink(audit: McpSettings['audit']): AuditSink | undefined {
+  if (audit === undefined || audit === false) return undefined
+  if (typeof audit === 'function') return audit
+  if (typeof audit === 'string') return jsonlAuditSink(audit)
+  return process.env.NODE_ENV === 'production' ? jsonlAuditSink('mcp-audit.jsonl') : consoleAuditSink()
+}
+
+/**
  * Mounts the MCP endpoint. Tool calls are dispatched back through the very app
  * being built, so `app` is read through a thunk — it does not exist yet at the
  * moment these routes are registered.
@@ -110,6 +128,7 @@ function mcpRoutes(
   const mcp = settings.mcp ?? {}
   let tools: Tool[] | undefined
   const identity = mcpIdentity(rawSettings)
+  const audit = resolveAuditSink(mcp.audit)
 
   return mcpHttpRoutes({
     path: mcp.path ?? '/mcp',
@@ -120,6 +139,8 @@ function mcpRoutes(
       // Built on first use: the route table is complete only after startup.
       tools: (tools ??= projectTools(rawSettings)),
       identity,
+      policy: mcp.policy,
+      audit,
       origin: new URL(request.url).origin,
       headers: request.headers,
     }),

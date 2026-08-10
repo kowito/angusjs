@@ -21,6 +21,26 @@ export type {
   ServerIdentity,
 } from './protocol.ts'
 
+export {
+  applyPolicy,
+  checkConfirmation,
+  needsConfirmation,
+  policyTools,
+  withConfirmation,
+  CONFIRM_ARGUMENT,
+} from './policy.ts'
+export type { Refusal, ToolPolicy } from './policy.ts'
+
+export {
+  consoleAuditSink,
+  emitAudit,
+  fingerprint,
+  jsonlAuditSink,
+  memoryAuditSink,
+  redact,
+} from './audit.ts'
+export type { AuditEvent, AuditSink } from './audit.ts'
+
 export { mcpHttpRoutes } from './http.ts'
 export type { McpHttpOptions } from './http.ts'
 

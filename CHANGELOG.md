@@ -5,6 +5,34 @@ contain breaking changes; those are listed first in each entry.
 
 ## Unreleased
 
+### Added — agent policy, confirmation and audit
+
+Route permissions already stop an agent exceeding the person operating it,
+because tool calls go through those routes. The gap was the other direction: an
+agent should usually have *less* authority than its user. "May read orders and
+issue refunds, may not delete customers" is not expressible as a user
+permission, since the same human can do all three through the admin.
+
+`mcp.policy` says it. `allow`/`deny` decide which tools exist at all — a
+withheld tool is absent from `tools/list` and unreachable by name, so the
+capability cannot be argued into existence by a prompt. `confirm` keeps a tool
+available but makes its effect two steps.
+
+**Deletes now require confirmation by default.** A destructive tool takes a
+`confirm: true` argument, declared in its schema, and refuses without it before
+the call reaches the database. The requirement lives in the schema rather than
+in an elicitation handshake because the modern protocol has no server-to-client
+channel on a stateless POST — there is nothing to elicit through. Set
+`confirm: []` to opt out.
+
+`mcp.audit` records each call: the tool, the arguments the model chose, the
+outcome, and a digest of the caller rather than their token. The HTTP access
+log sees the request a tool produced but not the tool, and never sees a call
+that was refused before dispatch.
+
+`angus mcp install [claude-code|cursor|claude-desktop]` registers the project
+with a client, merging into an existing config rather than replacing it.
+
 ### Fixed — constraint violations are no longer 500s
 
 A duplicate value, or a foreign key pointing at a row that does not exist, was
