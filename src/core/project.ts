@@ -14,6 +14,7 @@ import { mcpHttpRoutes, type ServerIdentity } from '../mcp/index.ts'
 import { policyTools } from '../mcp/policy.ts'
 import { buildResources, type Resource } from '../mcp/resources.ts'
 import { realtime } from '../realtime/index.ts'
+import { initTracing } from '../tracing.ts'
 import { buildTools, type Tool } from '../mcp/tools.ts'
 import { generateOpenApi, renderDocs, type OpenApiDocument } from '../openapi/index.ts'
 import { joinPath, Router } from '../routing/router.ts'
@@ -176,6 +177,17 @@ export async function createApp(rawSettings: Settings, options: BuildOptions = {
 
   if (settings.database && options.connectDatabase !== false && !hasConnection()) {
     await connect(settings.database, appModels(settings.apps))
+  }
+
+  // Before `ready()`, so anything an app does at startup is already traced.
+  if (settings.tracing !== false) {
+    await initTracing({
+      serviceName: settings.openapi === false ? undefined : settings.openapi?.title,
+      ...(settings.tracing ?? {}),
+      // An explicit `tracing: {...}` is an application asking for traces, so a
+      // missing SDK should say so rather than fail quietly.
+      enabled: settings.tracing === undefined ? undefined : true,
+    })
   }
 
   // Installed before `ready()`, so an app can send during startup.

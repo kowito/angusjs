@@ -206,6 +206,7 @@ The admin fails closed rather than open: with no configured permissions it serve
 | Schema language | TypeBox | It is what Elysia validates with, so sharing it means one schema, not two. |
 | HTTP, routing, lifecycle | Elysia | The whole premise. |
 | Password hashing | Bun | `Bun.password` is argon2id; a dependency would be worse. |
+| Trace collection and export | OpenTelemetry SDK | Angus emits spans through `@opentelemetry/api` when it is installed, and is a no-op when it is not. The HTTP root span belongs to the standard instrumentation — Elysia's hooks observe a request but cannot wrap one, and a root span has to wrap. |
 
 Angus adds two runtime dependencies of its own: `drizzle-orm` and `elysia`.
 
@@ -222,6 +223,7 @@ Escape hatches are part of the contract, not an admission of failure:
 
 ```text
 src/
+  tracing.ts    OpenTelemetry spans — a leaf, imported by anything
   db/           models, fields, QuerySets, lookups, Drizzle bridge, connection
   serializers/  FieldSpec -> TypeBox, representation and validation
   routing/      Router, views, ViewSets, permissions
@@ -233,7 +235,7 @@ src/
   cli/          the angus command
 ```
 
-The dependency direction is strictly downward: `core` may import `routing`, `routing` may import `db`, and `db` imports nothing else from Angus. `admin`, `openapi` and `mcp` are readers — they depend on `db` and `routing` and are depended on by nothing except `core`.
+The dependency direction is strictly downward: `core` may import `routing`, `routing` may import `db`, and `db` imports nothing from Angus except the top-level leaves (`tracing.ts`, `html.ts`), which import nothing themselves. Tracing has to be a leaf for exactly this reason — the query layer reports spans, and putting the tracer under `core` would have inverted the direction the rest of the architecture depends on. `admin`, `openapi` and `mcp` are readers — they depend on `db` and `routing` and are depended on by nothing except `core`.
 
 ---
 

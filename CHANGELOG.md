@@ -5,6 +5,26 @@ contain breaking changes; those are listed first in each entry.
 
 ## Unreleased
 
+### Added — OpenTelemetry tracing
+
+Traces spanning service → query, so the question a slow request always raises —
+*where did the time go?* — has an answer. An access log says a request took
+900ms; it cannot say that 850ms of it was one N+1 loop inside a service two
+calls down.
+
+`@opentelemetry/api` is an optional peer dependency. Without it every function
+is a no-op costing one branch, and the framework keeps its two runtime
+dependencies. Ask for tracing without the SDK installed and it says so at
+startup, rather than leaving you wondering why the traces are empty.
+
+Angus does not open a span for the HTTP request itself: Elysia's hooks observe
+a request but cannot wrap one, and a root span has to wrap. The standard OTel
+HTTP instrumentation does that properly and these spans attach beneath it —
+the architecture's own rule applied to tracing.
+
+Request logs now carry the trace ID when one is recording, which is what makes
+logs and traces usable together.
+
 ### Added — full-text search
 
 `Model.objects.search(query, fields)`, and `?search=` on any view set that

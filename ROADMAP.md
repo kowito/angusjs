@@ -29,16 +29,15 @@ work — plus four features.
 | P2 Data layer and services | Shipped. Transactions, F-expressions, relations, many-to-many, mixins, soft delete, aggregation, cursor pagination, application services, per-tool agent scopes. |
 | P3 Developer experience | Shipped. Typed client, `generate crud`, `seed`, scaffolding, admin, inspection commands. |
 | P4 Batteries | Shipped. Jobs, email, storage, cache, rate limiting, realtime, MCP resources, full-text search. |
-| P5 Operational layer | Shipped except OpenTelemetry. Health, graceful shutdown, structured logging, config validation, migration checking, security headers. |
+| P5 Operational layer | Shipped. OpenTelemetry, health, graceful shutdown, structured logging, config validation, migration checking, security headers. |
 | Continuous | Documentation site and Elysia upstream contributions not started. |
 
 **Outstanding, in the order they matter:**
 
 1. **Published to npm.** Everything else is unusable by anyone else until this happens.
 2. **A documentation site.** The README carries more than it should.
-3. **OpenTelemetry.** Traces spanning route → service → query.
-4. **OIDC and social sign-in, JWT.** Sessions cover the common case; these cover the rest.
-5. **Elysia upstream contributions.** Direction-aware schema types and route introspection are the two candidates the architecture has actually run into.
+3. **OIDC and social sign-in, JWT.** Sessions cover the common case; these cover the rest.
+4. **Elysia upstream contributions.** Direction-aware schema types and route introspection are the two candidates the architecture has actually run into.
 
 The percentage is a poor summary of the remaining work: publishing and docs are
 small in code and large in whether the project is usable by anyone else.

@@ -15,6 +15,7 @@ import { attachPrefetches, resolvePrefetch, type PrefetchMap, type PrefetchResul
 import { DoesNotExist, MultipleObjectsReturned } from './errors.ts'
 import { buildCondition, combine, Q, type Filter, type OrderBy, type QCondition, type ResolveContext } from './lookups.ts'
 import { searchCondition, searchRank, type SearchOptions } from './search.ts'
+import { traceQuery } from '../tracing.ts'
 import type { AnyModel, FieldMap, InsertOf, RowOf, UpdateOf } from './model.ts'
 
 type Condition<M extends AnyModel> = Filter<M['fields']> | Q<M['fields']>
@@ -331,7 +332,9 @@ export class QuerySet<M extends AnyModel, R = RowOf<M>> implements PromiseLike<R
   // -------------------------------------------------------------------------
 
   async execute(): Promise<R[]> {
-    const rows = (await this.compile(getConnection())) as R[]
+    const rows = (await traceQuery('select', this.model.meta.tableName, undefined, () =>
+      this.compile(getConnection()),
+    )) as R[]
 
     if (this.state.prefetch.length > 0) {
       await attachPrefetches(this.model, rows as Record<string, unknown>[], this.state.prefetch)

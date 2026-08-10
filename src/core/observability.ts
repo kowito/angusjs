@@ -13,6 +13,7 @@
  *   put back when it recovers — without being killed.
  */
 
+import { currentTraceId } from '../tracing.ts'
 import { Elysia } from 'elysia'
 import { getConnection, hasConnection } from '../db/connection.ts'
 import { sql } from 'drizzle-orm'
@@ -21,6 +22,8 @@ export const REQUEST_ID_HEADER = 'x-request-id'
 
 export interface RequestLogFields {
   requestId: string
+  /** The active OpenTelemetry trace, when one is recording. */
+  traceId?: string
   method: string
   path: string
   status: number
@@ -104,6 +107,11 @@ export function observability(options: ObservabilityOptions = {}): Elysia<any, a
 
       const user = context.user as { id?: unknown } | undefined
       if (user?.id !== undefined) fields.userId = String(user.id)
+
+      // Given a slow request in the log, this is how you find the span tree
+      // that explains it. Without it you search by timestamp and hope.
+      const traceId = currentTraceId()
+      if (traceId) fields.traceId = traceId
 
       emit(fields)
 

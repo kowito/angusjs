@@ -11,6 +11,7 @@ import type { DatabaseConfig } from '../db/connection.ts'
 import type { AuditSink } from '../mcp/audit.ts'
 import type { ToolPolicy } from '../mcp/policy.ts'
 import type { RealtimeOptions } from '../realtime/index.ts'
+import type { TracingOptions } from '../tracing.ts'
 import type { Context, Permission } from '../routing/router.ts'
 import type { AngusApp } from './app.ts'
 import type { CorsOptions, CsrfOptions, SecurityHeaderOptions } from '../http/security.ts'
@@ -106,6 +107,14 @@ export interface Settings {
    * off unless asked for.
    */
   realtime?: RealtimeOptions | false
+  /**
+   * OpenTelemetry traces spanning route → service → query.
+   *
+   * Requires `@opentelemetry/api` and an SDK; without them this is a no-op
+   * that says so at startup rather than leaving you wondering why the traces
+   * are empty.
+   */
+  tracing?: TracingOptions | false
   /** Includes stack traces in 500 responses. Defaults to `NODE_ENV !== 'production'`. */
   debug?: boolean
   /** Where migration SQL lives, relative to the project root. Defaults to `migrations`. */

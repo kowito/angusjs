@@ -60,9 +60,13 @@
     "elysia": "^1.4.29"
   },
   "peerDependencies": {
-    "drizzle-kit": "^0.31.10"
+    "drizzle-kit": "^0.31.10",
+    "@opentelemetry/api": "^1.9.0"
   },
   "peerDependenciesMeta": {
+    "@opentelemetry/api": {
+      "optional": true
+    },
     "drizzle-kit": {
       "optional": true
     }

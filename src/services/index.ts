@@ -18,6 +18,7 @@
 
 import { Value } from '@sinclair/typebox/value'
 import type { Static, TSchema } from 'elysia'
+import { traceService } from '../tracing.ts'
 import { atomic } from '../db/transaction.ts'
 import { PermissionDenied, Unauthorized } from '../http/errors.ts'
 import type { Context, Permission } from '../routing/router.ts'
@@ -189,7 +190,10 @@ export async function callService<S extends AnyService>(
       http: options.http,
     })
 
-  return definition.transactional ? atomic(run) : run()
+  // The service span is the useful middle of the tree: it names the operation
+  // in the application's own vocabulary, with the route above and the queries
+  // it caused below.
+  return traceService(definition.name, () => (definition.transactional ? atomic(run) : run()))
 }
 
 /** Validates and coerces, reporting failures the way serializers do. */
