@@ -38,7 +38,6 @@
     "!src/**/*.test.ts",
     "README.md",
     "ARCHITECTURE.md",
-    "ROADMAP.md",
     "UPSTREAM.md",
     "LICENSE"
   ],

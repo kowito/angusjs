@@ -171,9 +171,16 @@ bun scripts/build-docs.ts
 
 ## Status
 
-Pre-1.0 and not yet published to npm. The API is stabilising but not frozen.
+Pre-1.0. The API is stabilising but not frozen.
 
-[ROADMAP.md](ROADMAP.md) tracks what is built and what is not, honestly — including the parts that are not code. [UPSTREAM.md](UPSTREAM.md) records what building this found in Elysia, corrections included.
+Everything listed above is built, and the suite — 724 tests — passes on both SQLite and Postgres, which CI runs separately. The first Postgres run found three real bugs, which is the argument for running it.
+
+Two things are outstanding, and neither is code:
+
+- **Not published to npm.** Until that happens nobody else can use this.
+- **One report to file with Elysia.** [UPSTREAM.md](UPSTREAM.md) records what building this found — including three candidates that turned out not to be gaps at all, corrections kept.
+
+It has never been run in production by anyone. That is the honest limit on any claim made here.
 
 ---
 

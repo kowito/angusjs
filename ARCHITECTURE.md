@@ -31,7 +31,7 @@ And when the seam is uncomfortable, the resolution is fixed in advance:
 
 > **If Elysia already solves it well, Angus integrates with it. If Angus discovers that Elysia needs a better primitive to support production applications, improve Elysia rather than rebuilding that primitive inside Angus.**
 
-The failure mode this prevents is gradual: a slightly awkward seam gets worked around, then the workaround grows, and eventually Angus *contains* Elysia rather than extending it. Places where that pressure is currently real — direction-aware schema types, route introspection, typed context extension — are tracked as upstream candidates in [ROADMAP.md](ROADMAP.md), not as things to build locally.
+The failure mode this prevents is gradual: a slightly awkward seam gets worked around, then the workaround grows, and eventually Angus *contains* Elysia rather than extending it. Places where that pressure turned out to be real are recorded in [UPSTREAM.md](UPSTREAM.md) as things to raise upstream, not as things to build locally. Most of the candidates did not survive contact with the actual API.
 
 ---
 
@@ -154,11 +154,11 @@ This is the property the project exists to have. **A change that would desynchro
 
 ---
 
-## Planned: application services
+## Application services
 
-The current vocabulary — `Model → Serializer → ViewSet` — covers CRUD and stops there. Operations that aren't CRUD (`publishPost`, `refundInvoice`, `transferOwnership`) currently have nowhere to live except a route handler, which means re-implementing them for the admin, for an agent, and for a queue.
+`Model → Serializer → ViewSet` covers CRUD and stops there. Operations that aren't CRUD (`publishPost`, `refundInvoice`, `transferOwnership`) would otherwise have nowhere to live except a route handler, which means re-implementing them for the admin, for an agent, and for a queue.
 
-The planned fourth primitive is an **application service**: a declaration in the same style as a model, which every surface reads.
+The fourth primitive is an **application service**: a declaration in the same style as a model, which every surface reads.
 
 ```text
     REST      Admin      MCP       CLI       Jobs
@@ -171,9 +171,7 @@ The planned fourth primitive is an **application service**: a declaration in the
                        Database
 ```
 
-Structurally this is the same move the framework already makes one level down: a service declares its input schema, output schema, permissions and transaction boundary, and the surfaces become readers rather than re-implementations. It is also the natural home for the audit log and for agent confirmation on destructive operations, both of which would otherwise be duplicated per surface.
-
-Tracked in [ROADMAP.md](ROADMAP.md) under P2.
+Structurally this is the same move the framework makes one level down: a service declares its input schema, output schema, permissions and transaction boundary, and the surfaces become readers rather than re-implementations.
 
 ---
 
@@ -209,6 +207,21 @@ The admin fails closed rather than open: with no configured permissions it serve
 | Trace collection and export | OpenTelemetry SDK | Angus emits spans through `@opentelemetry/api` when it is installed, and is a no-op when it is not. The root span comes from Elysia's `.wrap()`, which is a higher-order function over the composed handler rather than a lifecycle hook, so it genuinely encloses the request. |
 
 Angus adds two runtime dependencies of its own: `drizzle-orm` and `elysia`.
+
+### Deliberately not built
+
+Saying no is what keeps the conceptual surface area survivable.
+
+| Not building | Because |
+| --- | --- |
+| Frontend or SSR framework | Generate a typed client; let people pick their UI. |
+| Backend-as-a-service | People choose this to own their backend. |
+| GraphQL | REST, OpenAPI and MCP already cover this audience. Revisit only on real demand. |
+| A second routing or validation layer | Elysia's. Non-negotiable — this is the governing rule. |
+| A migration diff engine | drizzle-kit does it well. Angus generates the schema and hands over. |
+| A query language as expressive as SQL | Past a point, developers would rather write SQL. Give them the escape hatch. |
+| Multi-runtime support | Bun-native is a feature; a Node layer would cost the performance story and double the test matrix. |
+| Internationalisation | Rarely the blocker for an API-first framework. |
 
 Escape hatches are part of the contract, not an admission of failure:
 
