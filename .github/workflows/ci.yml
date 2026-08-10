@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Test
+        run: bun test
+
+      # The scaffolded project must stay runnable; a broken generator is
+      # invisible to the unit tests but breaks every new user.
+      - name: Scaffold smoke test
+        run: |
+          bun link
+          cd "$(mktemp -d)"
+          bun "$GITHUB_WORKSPACE/src/cli/index.ts" startproject smoke
+          cd smoke
+          sed -i 's|"angusjs": "\^0.1.0"|"angusjs": "link:angusjs"|' package.json
+          bun install
+          bun "$GITHUB_WORKSPACE/src/cli/index.ts" startapp thing
+          bun "$GITHUB_WORKSPACE/src/cli/index.ts" check

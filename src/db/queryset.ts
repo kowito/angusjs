@@ -8,6 +8,8 @@
 
 import { asc, avg, count as countAgg, desc, eq, max as maxAgg, min as minAgg, sum, type SQL } from 'drizzle-orm'
 import { getConnection, type Connection } from './connection.ts'
+import { isFExpression } from './expressions.ts'
+import { activeDb } from './transaction.ts'
 import { DoesNotExist, MultipleObjectsReturned } from './errors.ts'
 import { buildCondition, combine, Q, type Filter, type OrderBy, type QCondition, type ResolveContext } from './lookups.ts'
 import type { AnyModel, FieldMap, InsertOf, RowOf, UpdateOf } from './model.ts'
@@ -155,7 +157,7 @@ export class QuerySet<M extends AnyModel, R = RowOf<M>> implements PromiseLike<R
 
   private context(connection: Connection): ResolveContext {
     return {
-      db: connection.db,
+      db: activeDb(connection),
       dialect: connection.dialect,
       table: (model) => connection.table(model),
     }
@@ -214,7 +216,7 @@ export class QuerySet<M extends AnyModel, R = RowOf<M>> implements PromiseLike<R
     const ctx = this.context(connection)
     const table = connection.table(this.model)
 
-    let query = connection.db.select(this.selection(connection)).from(table).$dynamic()
+    let query = activeDb(connection).select(this.selection(connection)).from(table).$dynamic()
 
     for (const relation of this.state.selectRelated) {
       const target = this.model.fields[relation]!.spec.to!()
@@ -303,7 +305,7 @@ export class QuerySet<M extends AnyModel, R = RowOf<M>> implements PromiseLike<R
   async count(): Promise<number> {
     const connection = getConnection()
     const ctx = this.context(connection)
-    let query = connection.db
+    let query = activeDb(connection)
       .select({ value: countAgg() })
       .from(connection.table(this.model))
       .$dynamic()
@@ -340,7 +342,7 @@ export class QuerySet<M extends AnyModel, R = RowOf<M>> implements PromiseLike<R
                 : countAgg(column)
     }
 
-    let query = connection.db.select(selection).from(table).$dynamic()
+    let query = activeDb(connection).select(selection).from(table).$dynamic()
     const where = this.where(ctx)
     if (where) query = query.where(where)
     const [row] = await query
@@ -375,7 +377,10 @@ export class QuerySet<M extends AnyModel, R = RowOf<M>> implements PromiseLike<R
     const connection = getConnection()
     const table = connection.table(this.model)
     const values = rows.map((row) => this.toColumns(row as Record<string, unknown>, 'insert'))
-    return (await connection.db.insert(table).values(values).returning(this.fullSelection(connection))) as RowOf<M>[]
+    return (await activeDb(connection)
+      .insert(table)
+      .values(values)
+      .returning(this.fullSelection(connection))) as RowOf<M>[]
   }
 
   /** Updates every matching row. Returns the updated rows. */
@@ -383,10 +388,10 @@ export class QuerySet<M extends AnyModel, R = RowOf<M>> implements PromiseLike<R
     const connection = getConnection()
     const ctx = this.context(connection)
     const table = connection.table(this.model)
-    const values = this.toColumns(data as Record<string, unknown>, 'update')
+    const values = this.toColumns(data as Record<string, unknown>, 'update', table)
     if (Object.keys(values).length === 0) return []
 
-    let query = connection.db.update(table).set(values).$dynamic()
+    let query = activeDb(connection).update(table).set(values).$dynamic()
     const where = this.where(ctx)
     if (where) query = query.where(where)
     return (await query.returning(this.fullSelection(connection))) as RowOf<M>[]
@@ -398,7 +403,7 @@ export class QuerySet<M extends AnyModel, R = RowOf<M>> implements PromiseLike<R
     const ctx = this.context(connection)
     const table = connection.table(this.model)
 
-    let query = connection.db.delete(table).$dynamic()
+    let query = activeDb(connection).delete(table).$dynamic()
     const where = this.where(ctx)
     if (where) query = query.where(where)
     const deleted = await query.returning({ id: table[this.model.columns[this.model.pk]!] })
@@ -439,13 +444,26 @@ export class QuerySet<M extends AnyModel, R = RowOf<M>> implements PromiseLike<R
    * Maps a `{ attr: value }` object onto physical columns, applying JS-side
    * defaults and auto timestamps along the way.
    */
-  private toColumns(data: Record<string, unknown>, mode: 'insert' | 'update'): Record<string, unknown> {
+  private toColumns(
+    data: Record<string, unknown>,
+    mode: 'insert' | 'update',
+    table?: Record<string, any>,
+  ): Record<string, unknown> {
     const values: Record<string, unknown> = {}
 
     for (const [key, raw] of Object.entries(data)) {
       if (raw === undefined) continue
       const attr = attrFor(this.model, key)
       const field = this.model.fields[attr]!
+
+      // An F-expression becomes SQL computed from the column's own value, so
+      // the database applies it atomically rather than us reading and writing.
+      if (isFExpression(raw)) {
+        if (!table) throw new Error('F() expressions are only supported in update().')
+        values[this.model.columns[attr]!] = raw.toSQL(this.model, table)
+        continue
+      }
+
       // Relations accept an instance or a bare id.
       const value =
         field.spec.kind === 'foreignKey' && raw !== null && typeof raw === 'object' && 'id' in (raw as object)

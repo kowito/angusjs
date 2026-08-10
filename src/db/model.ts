@@ -7,6 +7,7 @@
  */
 
 import { Field, RelationField, auto, type AnyField, type FieldMeta, type FieldSpec } from './fields.ts'
+import type { FExpression } from './expressions.ts'
 import { Manager } from './queryset.ts'
 
 export type FieldMap = Record<string, AnyField>
@@ -89,9 +90,13 @@ export type InsertRow<F extends FieldMap> = {
   [K in keyof F as K extends OptionalInsertKeys<F> ? K : never]?: InsertValue<F, K>
 }
 
-/** The shape accepted by `update()` — everything optional, pk excluded. */
+/**
+ * The shape accepted by `update()` — everything optional, pk excluded.
+ * Any field also accepts an `F()` expression, which is computed by the database
+ * from the column's own value rather than read into JavaScript first.
+ */
 export type UpdateRow<F extends FieldMap> = Partial<{
-  [K in keyof F as MetaOfField<F[K]>['primaryKey'] extends true ? never : K]: InsertValue<F, K>
+  [K in keyof F as MetaOfField<F[K]>['primaryKey'] extends true ? never : K]: InsertValue<F, K> | FExpression
 }>
 
 type HasExplicitPk<F extends FieldMap> = true extends {

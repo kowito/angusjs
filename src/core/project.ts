@@ -8,15 +8,13 @@
 
 import { Elysia } from 'elysia'
 import { connect, hasConnection } from '../db/connection.ts'
-import { DoesNotExist, MultipleObjectsReturned } from '../db/errors.ts'
 import { page } from '../html.ts'
-import { APIError, NotFound, ServerError } from '../http/errors.ts'
 import { mcpHttpRoutes, type ServerIdentity } from '../mcp/index.ts'
 import { buildTools, type Tool } from '../mcp/tools.ts'
 import { generateOpenApi, renderDocs, type OpenApiDocument } from '../openapi/index.ts'
 import { joinPath, Router } from '../routing/router.ts'
-import { ValidationError } from '../serializers/index.ts'
 import { appModels, type AngusApp } from './app.ts'
+import { errorTranslation } from './errors.ts'
 import { resolveSettings, type ResolvedSettings, type Settings } from './settings.ts'
 
 export interface BuildOptions {
@@ -32,72 +30,6 @@ export function projectRouter(apps: AngusApp[], prefix = ''): Router {
     root.include(app.absolutePrefix ? app.prefix : joinPath(prefix, app.prefix), app.urls)
   }
   return root
-}
-
-/**
- * Translates thrown errors into JSON responses.
- *
- * The framework's whole error story lives here: a view can `throw new
- * NotFound()`, let `DoesNotExist` bubble up from `.get()`, or let a serializer
- * reject a payload, and all three come out as the right status code.
- */
-function errorHandling(settings: ResolvedSettings) {
-  return new Elysia({ name: 'angus:errors' }).onError({ as: 'global' }, ({ code, error, set }) => {
-    if (error instanceof APIError) {
-      set.status = error.status
-      return error.toBody()
-    }
-
-    // A `get()` that found nothing is a 404 at the HTTP boundary.
-    if (error instanceof DoesNotExist) {
-      set.status = 404
-      return new NotFound(error.message).toBody()
-    }
-
-    if (error instanceof MultipleObjectsReturned) {
-      set.status = 500
-      return new ServerError(error.message).toBody()
-    }
-
-    if (error instanceof ValidationError) {
-      set.status = 400
-      return { error: 'ValidationError', detail: 'Validation failed.', errors: error.errors }
-    }
-
-    // Elysia's own schema validation.
-    if (code === 'VALIDATION') {
-      set.status = 422
-      const validation = error as unknown as { all?: { path?: string; message?: string }[]; message: string }
-      const errors: Record<string, string[]> = {}
-      for (const issue of validation.all ?? []) {
-        const field = (issue.path ?? '').replace(/^\//, '') || 'detail'
-        ;(errors[field] ??= []).push(issue.message ?? 'Invalid value.')
-      }
-      return {
-        error: 'ValidationError',
-        detail: 'Request did not match the expected schema.',
-        errors: Object.keys(errors).length > 0 ? errors : { detail: [validation.message] },
-      }
-    }
-
-    if (code === 'NOT_FOUND') {
-      set.status = 404
-      return new NotFound().toBody()
-    }
-
-    set.status = 500
-    const message = error instanceof Error ? error.message : String(error)
-    if (settings.debug) {
-      console.error(error)
-      return {
-        error: 'ServerError',
-        detail: message,
-        stack: error instanceof Error ? error.stack?.split('\n') : undefined,
-      }
-    }
-    console.error(error)
-    return new ServerError().toBody()
-  })
 }
 
 /** Builds the OpenAPI document for a project without starting it. */
@@ -202,7 +134,7 @@ export async function createApp(rawSettings: Settings, options: BuildOptions = {
 
   const elysia = new Elysia({ name: 'angus' })
 
-  elysia.use(errorHandling(settings))
+  elysia.use(errorTranslation({ debug: settings.debug }))
 
   const docs = openApiRoutes(settings, rawSettings)
   if (docs) elysia.use(docs)

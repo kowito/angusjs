@@ -11,6 +11,7 @@ import { runServer } from '../core/project.ts'
 import { resolveSettings } from '../core/settings.ts'
 import { check, models, openapi, routes, shell } from './commands/inspect.ts'
 import { mcp as mcpCommand } from './commands/mcp.ts'
+import { run as runCommand } from './commands/run.ts'
 import { makemigrations, migrate } from './commands/migrations.ts'
 import { startapp, startproject } from './commands/scaffold.ts'
 import { bold, cyan, dim, fail, green, info } from './ui.ts'
@@ -72,6 +73,11 @@ const COMMANDS: Record<string, Command> = {
   check: {
     summary: 'Validate the project without starting it',
     run: ({ project }) => check(project!),
+  },
+  run: {
+    summary: 'Invoke an application service',
+    usage: "angus run <service> [--key value] [--json '{...}'] [--list]",
+    run: ({ project, args }) => runCommand(project!, args),
   },
   shell: {
     summary: 'Open a REPL with your models loaded',

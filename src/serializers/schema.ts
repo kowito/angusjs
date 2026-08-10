@@ -99,7 +99,10 @@ function baseSchema(spec: FieldSpec, mode: SchemaMode): TSchema {
         : t.Date(notes)
 
     case 'json':
-      return t.Any(notes)
+      // `t.Any()` alone serialises to `{}`, which is valid JSON Schema but
+      // tells an OpenAPI reader or an agent nothing at all. A description
+      // costs nothing and makes the field self-documenting.
+      return t.Any({ description: 'Arbitrary JSON.', ...notes })
   }
 }
 

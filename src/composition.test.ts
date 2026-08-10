@@ -10,6 +10,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { Elysia, t } from 'elysia'
 import { connect, disconnect, getConnection } from './db/connection.ts'
+import { DoesNotExist } from './db/errors.ts'
 import { f } from './db/fields.ts'
 import { defineModel } from './db/model.ts'
 import { router } from './routing/router.ts'
@@ -101,5 +102,60 @@ describe('dropping Angus into an Elysia app you already own', () => {
       .flatten('/api')
 
     expect(routes.map((route) => `${route.method.toUpperCase()} ${route.path}`)).toContain('GET /api/widgets/:id')
+  })
+})
+
+describe('the plugin surface', () => {
+  test('angus() installs error translation into an app you own', async () => {
+    const { angus, mount } = await import('./plugin.ts')
+
+    const app = new Elysia()
+      .use(angus())
+      .get('/boom', () => {
+        // A DoesNotExist from the ORM must become a 404 even though this app
+        // never went near createApp().
+        throw new DoesNotExist('widget')
+      })
+      .use(mount('/widgets', router().include('/', modelViewSet({ model: Widget, serializer: WidgetSerializer, pagination: false }))))
+
+    const failed = await app.handle(new Request('http://test/boom'))
+    expect(failed.status).toBe(404)
+    expect(((await failed.json()) as any).code).toBe('not_found')
+
+    expect((await app.handle(new Request('http://test/widgets'))).status).toBe(200)
+  })
+
+  test('openapi() documents routers without a project', async () => {
+    const { openapi } = await import('./plugin.ts')
+    const routes = router().include('/widgets', modelViewSet({ model: Widget, serializer: WidgetSerializer }))
+    const app = new Elysia().use(openapi([routes], { title: 'Standalone', version: '9.9.9' }))
+
+    const spec = (await (await app.handle(new Request('http://test/openapi.json'))).json()) as any
+    expect(spec.info.title).toBe('Standalone')
+    expect(spec.paths['/widgets']).toBeDefined()
+
+    expect((await app.handle(new Request('http://test/docs'))).status).toBe(200)
+  })
+
+  test('mcp() exposes routers as tools without a project', async () => {
+    const { angus, mcp, mount } = await import('./plugin.ts')
+    const routes = router().include('/widgets', modelViewSet({ model: Widget, serializer: WidgetSerializer, pagination: false }))
+
+    let self: Elysia<any, any>
+    const app = new Elysia()
+      .use(angus())
+      .use(mount('', routes))
+      .use(mcp([routes], () => self, { name: 'standalone' }))
+    self = app
+
+    const response = await app.handle(
+      new Request('http://test/mcp', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+      }),
+    )
+    const body = (await response.json()) as any
+    expect(body.result.tools.map((tool: any) => tool.name)).toContain('widget-list')
   })
 })

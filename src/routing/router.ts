@@ -150,7 +150,16 @@ export class Router {
 
       const handler = async (context: Context) => {
         for (const permission of permissions) {
-          if (!(await permission(context))) {
+          let allowed: boolean
+          try {
+            allowed = await permission(context)
+          } catch (error) {
+            // A permission may throw a Response to short-circuit with something
+            // other than an error — a browser redirect to a login page, say.
+            if (error instanceof Response) return error
+            throw error
+          }
+          if (!allowed) {
             throw context.user ? new PermissionDenied() : new Unauthorized()
           }
         }

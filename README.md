@@ -124,6 +124,8 @@ Lifecycle hooks, guards, decorators and plugins apply to Angus routes exactly as
 | MCP | Tool input and output schemas | ✅ |
 | Typed client | End-to-end typed fetch client | Planned |
 
+Beyond the model, an **application service** declares a non-CRUD operation once and is read by REST, OpenAPI, MCP and the CLI the same way.
+
 Input and output contracts stay separate, so input coercion never leaks into your public API types. (Elysia's `t.Integer` accepts `"3"` from a query string and serialises as `anyOf: [string, integer]` — correct for a request, wrong for a response, where it would make a generated client type the field `string | number`. Angus builds response schemas from plain TypeBox and keeps coercion on the way in.)
 
 ---
@@ -200,6 +202,40 @@ const publish = view({
   },
 })
 ```
+
+### Application services
+
+`Model → Serializer → ViewSet` covers CRUD and stops. A service declares an operation that isn't CRUD, once, and every surface reads that declaration.
+
+```ts
+export const approveInvoice = service({
+  name: 'approve-invoice',
+  input: t.Object({ invoiceId: t.Numeric() }),
+  output: InvoiceSerializer.read,
+  permissions: [isStaff],
+  transactional: true,               // default
+  async handler({ input, actor }) { /* ... */ },
+})
+
+router().post('/invoices/:invoiceId/approve', fromService(approveInvoice, {
+  params: t.Object({ invoiceId: t.Numeric() }),
+}))
+```
+
+Mounting is the only adapter needed: OpenAPI and MCP already read the route table, so the service becomes a documented endpoint *and* an agent tool with no second registration. It's also `angus run approve-invoice --invoiceId 3`.
+
+### Transactions
+
+```ts
+await atomic(async () => {
+  const order = await Order.objects.create({ ... })
+  await Stock.objects.filter({ id: order.stockId }).update({ count: F('count').sub(1) })
+})
+```
+
+Ambient, so a query several frames deep — inside a service, inside a model hook — joins the transaction without a handle being threaded through. Nested calls become savepoints.
+
+`F()` refers to a column's own value, so `update({ views: F('views').add(1) })` becomes `SET views = views + 1` and concurrent increments don't lose each other.
 
 ### Admin
 
@@ -279,7 +315,20 @@ authenticate: async ({ request }) => resolveUser(request.headers.get('authorizat
 
 The same rules protect REST endpoints, the admin, and MCP tools, because all three dispatch through the same routes.
 
-> **Today Angus provides the authorization model and expects you to supply identity.** A built-in auth app — user model, password hashing, sessions, tokens, social login, and an admin login page — is the next milestone. See [ROADMAP.md](ROADMAP.md).
+Identity ships in the box (`angusjs/auth`): a `User` model, argon2id hashing via `Bun.password`, sessions and API tokens, password reset, and an admin login page.
+
+```ts
+import { adminAuthApp, authApp, authenticate, isStaff } from 'angusjs/auth'
+
+export default defineSettings({
+  apps: [authApp(), adminAuthApp(), admin.app(), blog],
+  authenticate,
+})
+```
+
+Bearer tokens and `HttpOnly` cookies resolve to the same identity, so an API client, a browser in the admin, and an agent over MCP are all checked by the same predicates. `hasScope()` lets a token be *narrower* than the user who issued it.
+
+Social login (OIDC) is the remaining piece — see [ROADMAP.md](ROADMAP.md).
 
 ---
 
@@ -297,6 +346,7 @@ The same rules protect REST endpoints, the admin, and MCP tools, because all thr
 | `angus check` | Validate the project without starting it |
 | `angus openapi [--out]` | Print or write the OpenAPI document |
 | `angus mcp [--list]` | Serve the API to agents over MCP |
+| `angus run <service>` | Invoke an application service |
 | `angus shell` | REPL with your models in scope |
 
 ---
@@ -318,11 +368,20 @@ MySQL isn't supported: Drizzle's MySQL driver has no `RETURNING`, which the writ
 
 ## Testing
 
-`createApp` gives you the Elysia instance without binding a port:
+`angusjs/testing` supplies a database that builds itself from your models, cases that roll back, and a client with no port:
 
 ```ts
-const app = await createApp(settings, { connectDatabase: false })
-const response = await app.handle(new Request('http://test/api/products'))
+import { factory, testClient, testDatabase, transactional } from 'angusjs/testing'
+
+const db = await testDatabase({ models: [Product] })
+const client = await testClient(settings, { basePath: '/api' })
+const products = factory(Product, (n) => ({ name: `Product ${n}`, price: '9.99' }))
+
+test('lists products', () => transactional(async () => {
+  await products.createMany(3)
+  const response = await client.get('/products')
+  expect(response.body.count).toBe(3)
+}))
 ```
 
 ---
@@ -345,9 +404,9 @@ const response = await app.handle(new Request('http://test/api/products'))
 
 Under active development, pre-1.0. APIs may change.
 
-**Shipped:** models, migrations, QuerySets with typed lookups, serializers, views and view sets, permissions, admin, OpenAPI, MCP, CLI. 168 tests, clean typecheck.
+**Shipped:** models, migrations, QuerySets with typed lookups, transactions and F-expressions, serializers, views and view sets, application services, identity and authorization, admin (with login), OpenAPI, MCP, testing utilities, an Elysia plugin surface, and the CLI. 323 tests, clean typecheck.
 
-**Next:** a published model IR with a conformance suite, testing utilities, then one coherent identity and authorization model consumed by REST, admin and MCP alike — followed by transactions and relations, application services, and typed client generation.
+**Next:** reverse relations and `prefetchRelated`, many-to-many, typed client generation, then email, jobs and storage.
 
 The goal it all serves: **make Elysia capable of carrying an entire production application without leaving the Elysia ecosystem.** The full plan, with priorities and rationale, is in [ROADMAP.md](ROADMAP.md).
 

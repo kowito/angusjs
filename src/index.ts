@@ -35,6 +35,8 @@ export type {
   UpdateOf,
 } from './db/index.ts'
 export { connect, disconnect, getConnection } from './db/connection.ts'
+export { atomic, inTransaction, rollbackAfter, Rollback } from './db/transaction.ts'
+export { F, FExpression } from './db/expressions.ts'
 export { DoesNotExist, IntegrityError, MultipleObjectsReturned } from './db/errors.ts'
 
 // Serializers
@@ -76,6 +78,12 @@ export type {
   ViewSetHooks,
 } from './routing/index.ts'
 
+// Elysia plugin surface — incremental adoption
+export { angus, mount, openapi as openapiPlugin, mcp as mcpPlugin, admin as adminPlugin } from './plugin.ts'
+export type { AngusPluginOptions, McpPluginOptions } from './plugin.ts'
+export { errorTranslation, ERROR_CODES, codeForStatus } from './core/errors.ts'
+export type { ErrorCode } from './core/errors.ts'
+
 // Admin
 export { AdminSite, adminSite } from './admin/index.ts'
 export type { AdminSiteOptions, ModelAdminOptions } from './admin/index.ts'
@@ -87,6 +95,11 @@ export type { OpenApiDocument, OpenApiOptions } from './openapi/index.ts'
 // MCP
 export { buildTools, callTool, dispatch, serveStdio, SUPPORTED_VERSIONS } from './mcp/index.ts'
 export type { DispatchContext, ServerIdentity, Tool, ToolDefinition } from './mcp/index.ts'
+
+// Application services
+export { service, callService, getService, registeredServices } from './services/index.ts'
+export type { AnyService, CallOptions, Service, ServiceConfig, ServiceContext } from './services/index.ts'
+export { fromService } from './services/route.ts'
 
 // HTTP
 export {

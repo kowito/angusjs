@@ -109,6 +109,13 @@ Today the golden path stops at "authenticated," and the production path stops at
 
 ---
 
+> **Status, updated.** Much of P0–P2 now ships. Done: the IR conformance suite,
+> the Elysia plugin surface, the error contract, testing infrastructure,
+> LICENSE/CI/changelog, the identity and authorization model with admin login,
+> transactions, F-expressions, and application services. Outstanding in those
+> phases: relations (reverse, prefetch, M2M), OIDC, and the MySQL decision.
+> See [CHANGELOG.md](CHANGELOG.md).
+
 ## P0 — Core contract and ecosystem foundation
 
 *The contracts everything else is built on. Getting these wrong is expensive later in a way that a missing feature never is.*

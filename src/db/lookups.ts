@@ -25,6 +25,7 @@ import {
   type SQL,
 } from 'drizzle-orm'
 import type { AnyField, Field } from './fields.ts'
+import { isFExpression, type FExpression } from './expressions.ts'
 import type { AnyModel, FieldMap, FieldValue } from './model.ts'
 
 // ---------------------------------------------------------------------------
@@ -44,11 +45,11 @@ type FilterKeyOf<F extends FieldMap, K extends keyof F & string> = IsRelation<F[
 
 /** Lookups that make sense for every field type. */
 type CommonLookups<K extends string, V> = {
-  [P in K]?: V | readonly V[]
+  [P in K]?: V | readonly V[] | FExpression
 } & {
-  [P in `${K}__exact`]?: V
+  [P in `${K}__exact`]?: V | FExpression
 } & {
-  [P in `${K}__ne`]?: V
+  [P in `${K}__ne`]?: V | FExpression
 } & {
   [P in `${K}__in`]?: readonly V[]
 } & {
@@ -69,7 +70,7 @@ type StringLookups<K extends string> = {
 }
 
 type OrderedLookups<K extends string, V> = {
-  [P in `${K}__gt` | `${K}__gte` | `${K}__lt` | `${K}__lte`]?: V
+  [P in `${K}__gt` | `${K}__gte` | `${K}__lt` | `${K}__lte`]?: V | FExpression
 } & {
   [P in `${K}__range`]?: readonly [V, V]
 }
@@ -350,7 +351,8 @@ function buildFieldCondition(
     )
   }
   const key = `${attr}__${lookup}`
-  const value = normalizeValue(field, rawValue)
+  // Comparing a column to another column, rather than to a literal.
+  const value = isFExpression(rawValue) ? rawValue.toSQL(model, table) : normalizeValue(field, rawValue)
 
   switch (lookup) {
     case 'exact':
