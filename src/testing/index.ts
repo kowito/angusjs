@@ -38,12 +38,39 @@ export interface TestDatabase {
 }
 
 /**
+ * The database a test uses when it does not name one.
+ *
+ * In-memory SQLite unless `ANGUS_TEST_DATABASE_URL` says otherwise, which is
+ * how the same suite runs against a real Postgres server. Without that, the
+ * whole Postgres runtime path — `ILIKE`, `websearch_to_tsquery`, `RETURNING`,
+ * the pooled driver, driver-level transactions — is code that has never been
+ * executed, which is a poor thing to recommend for production.
+ */
+export function defaultTestDatabase(): DatabaseConfig {
+  const url = Bun.env.ANGUS_TEST_DATABASE_URL
+  if (!url) return { dialect: 'sqlite', url: ':memory:' }
+
+  return {
+    dialect: url.startsWith('postgres') ? 'postgres' : 'sqlite',
+    url,
+    // One connection: the tests create and drop tables constantly, and a pool
+    // makes that racy for no benefit at this size.
+    max: 1,
+  }
+}
+
+/** Which dialect the suite is currently running against. */
+export function testDialect(): 'sqlite' | 'postgres' {
+  return defaultTestDatabase().dialect
+}
+
+/**
  * Opens an isolated database and creates the tables for `models` directly from
  * their definitions — no migration files, so a test never depends on migration
  * state that has drifted.
  */
 export async function testDatabase(options: TestDatabaseOptions): Promise<TestDatabase> {
-  const config = options.database ?? { dialect: 'sqlite' as const, url: ':memory:' }
+  const config = options.database ?? defaultTestDatabase()
   const connection = await connect(config, options.models)
 
   await createTables(connection, options.models)
@@ -204,6 +231,14 @@ function literal(value: unknown): string {
   if (value === null) return 'NULL'
   if (typeof value === 'number') return String(value)
   if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE'
+
+  // Objects and arrays are JSON defaults. `String([])` is the empty string,
+  // which SQLite stores happily in a text column and Postgres rejects as
+  // invalid JSON — so on SQLite this was wrong and silent.
+  if (typeof value === 'object') {
+    return `'${JSON.stringify(value).replace(/'/g, "''")}'`
+  }
+
   return `'${String(value).replace(/'/g, "''")}'`
 }
 

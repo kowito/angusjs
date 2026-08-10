@@ -18,9 +18,11 @@ Every item below either adds a surface to that declaration, removes a reason to 
 
 ## Status
 
-Roughly **95%** of the code on this roadmap is built and tested. What is left is
-mostly the parts that are not code — documentation, publishing, and upstream
-work — plus four features.
+Every feature on this roadmap is built, and the suite — 724 tests — passes on
+both SQLite and Postgres, which it did not until recently: the first Postgres
+run found three real bugs. CI runs both dialects.
+
+What remains is not code.
 
 | Phase | State |
 | --- | --- |
@@ -37,8 +39,9 @@ work — plus four features.
 1. **Published to npm.** Everything else is unusable by anyone else until this happens.
 2. **One upstream report to Elysia.** Investigating the friction found that three of five candidates were not gaps at all — including route introspection, which this roadmap had wrong, and request wrapping, which turned out to be possible and is now used for tracing. What remains is a WebSocket footgun and a documentation contribution. See [UPSTREAM.md](UPSTREAM.md).
 
-The percentage is a poor summary of the remaining work: publishing and docs are
-small in code and large in whether the project is usable by anyone else.
+A percentage is a poor summary here. Counting features, this is finished.
+Counting production readiness, the honest statement is narrower: it is tested
+on both supported databases and has never been run in anger by anyone.
 
 ## The governing rule
 

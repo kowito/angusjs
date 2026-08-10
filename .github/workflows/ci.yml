@@ -20,7 +20,7 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
-      - name: Test
+      - name: Test (SQLite)
         run: bun test
 
       # The scaffolded project must stay runnable; a broken generator is
@@ -49,3 +49,38 @@ jobs:
           # The generator appends code and imports to files it did not write, so
           # what matters is that the project still compiles afterwards.
           bunx tsc --noEmit
+
+  # Postgres is the recommended production dialect, and until this job existed
+  # every Postgres-specific code path — ILIKE, websearch_to_tsquery, RETURNING,
+  # the pooled driver, driver-level transactions — was written and never run.
+  # The first run of it found three real bugs.
+  postgres:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: angus_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install --frozen-lockfile
+
+      - name: Test (Postgres)
+        run: bun test
+        env:
+          ANGUS_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/angus_test

@@ -5,6 +5,29 @@ contain breaking changes; those are listed first in each entry.
 
 ## Unreleased
 
+### Fixed — three bugs found by running the suite on Postgres
+
+The suite had only ever run on SQLite. Pointing it at a real Postgres server
+via `ANGUS_TEST_DATABASE_URL` found three failures immediately, and CI now runs
+both.
+
+**Constraint violations were 500s on Postgres.** Drizzle wraps driver errors in
+a `DrizzleQueryError` whose message is the SQL rather than the failure, so the
+classifier — which read only the top-level message — matched nothing. It now
+walks the `cause` chain and prefers SQLSTATE (`23505` and friends), which is
+better evidence than message text anyway: standardised, stable, and unaffected
+by the server's locale. The 409/400 mapping worked on SQLite the whole time.
+
+**`groupBy` produced invalid SQL on Postgres.** A model's default ordering was
+applied to a grouped query, so `ORDER BY id` appeared with no `id` in the
+`GROUP BY`. Postgres rejects that outright; SQLite permits a bare column and
+returns an arbitrary row's value for it. Inherited ordering is now dropped, and
+an ordering the caller asked for by name raises an explanation instead.
+
+**JSON defaults produced invalid DDL.** The test harness rendered a `[]`
+default as `String([])` — the empty string — which SQLite stores happily in a
+text column and Postgres rejects as invalid JSON.
+
 ### Fixed — `startapp` now installs the app it creates
 
 An app scaffolded by `startapp` was created on disk but never added to `apps`

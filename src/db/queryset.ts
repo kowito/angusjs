@@ -6,7 +6,7 @@
  * terminal method (`count`, `first`, `delete`, ...) is called.
  */
 
-import { asc, avg, count as countAgg, desc, eq, max as maxAgg, min as minAgg, sum, type SQL } from 'drizzle-orm'
+import { asc, avg, count as countAgg, desc, eq, max as maxAgg, min as minAgg, sql, sum, type SQL } from 'drizzle-orm'
 import { getConnection, type Connection } from './connection.ts'
 import { isFExpression } from './expressions.ts'
 import { activeDb } from './transaction.ts'
@@ -472,17 +472,43 @@ export class QuerySet<M extends AnyModel, R = RowOf<M>> implements PromiseLike<R
 
     query = query.groupBy(...groupAttrs.map((attr) => table[this.model.columns[attr]!]))
 
-    const ordering = this.effectiveOrdering()
-    if (ordering.length > 0) {
-      query = query.orderBy(
-        ...ordering.map((entry) => {
-          const descending = entry.startsWith('-')
-          const attr = attrFor(this.model, descending ? entry.slice(1) : entry)
-          const column = table[this.model.columns[attr]!]
-          return descending ? desc(column) : asc(column)
-        }),
-      )
+    // A grouped query may only be ordered by something it grouped by or
+    // selected. The model's default ordering is usually neither — Postgres
+    // rejects the query outright, while SQLite quietly permits a bare column
+    // and returns an arbitrary row's value for it.
+    const grouped = new Set(groupAttrs as string[])
+    const explicit = this.state.ordering.length > 0 && this.state.ordering[0] !== NO_ORDERING
+
+    const usable: SQL[] = []
+    for (const entry of this.effectiveOrdering()) {
+      const descending = entry.startsWith('-')
+      const name = descending ? entry.slice(1) : entry
+
+      // An aggregate alias is orderable: it is in the select list.
+      if (name in spec) {
+        usable.push(descending ? desc(sql.identifier(name)) : asc(sql.identifier(name)))
+        continue
+      }
+
+      if (grouped.has(name)) {
+        const column = table[this.model.columns[attrFor(this.model, name)]!]
+        usable.push(descending ? desc(column) : asc(column))
+        continue
+      }
+
+      if (explicit) {
+        // Asked for by name, so silence would be wrong: the caller believes
+        // the results are ordered by something the database cannot order by.
+        throw new Error(
+          `groupBy(): cannot order by "${name}" because it is neither grouped nor aggregated. ` +
+            `Order by one of ${[...grouped, ...Object.keys(spec)].join(', ')}, or call unordered().`,
+        )
+      }
+      // Otherwise it is the model's default ordering, inherited rather than
+      // requested, and dropping it is what the caller meant.
     }
+
+    if (usable.length > 0) query = query.orderBy(...usable)
 
     if (this.state.limit !== undefined) query = query.limit(this.state.limit)
 
