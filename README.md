@@ -653,6 +653,31 @@ Angus is not trying to replace Elysia. It is an application layer built on top o
 
 MIT
 
+## Social sign-in
+
+```ts
+socialAuthRoutes({
+  providers: [providers.google(env.GOOGLE_ID, env.GOOGLE_SECRET)],
+  secret: env.SECRET_KEY,
+  baseUrl: 'https://app.example.com',
+})
+```
+
+Two routes: one that sends the browser to the provider with PKCE, `state` and a
+nonce, and one that checks all three, exchanges the code and issues an ordinary
+Angus session. Presets for Google, GitHub and Microsoft.
+
+The default is that a provider's email links to an existing account **only if
+the provider verified it**. Otherwise anyone can register at a provider using
+someone else's address and sign in as them. `linkPolicy: 'any-email'` relaxes
+that, and is only safe when every provider you configure verifies addresses
+itself.
+
+JWTs are available separately (`signJwt`, `verifyJwt`, `verifyJwtWithJwks`) for
+tokens another service must verify without calling you. Angus's own sessions
+stay opaque and database-backed, because those can be revoked and a JWT cannot.
+
+
 ## Search
 
 ```ts

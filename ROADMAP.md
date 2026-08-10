@@ -18,14 +18,14 @@ Every item below either adds a surface to that declaration, removes a reason to 
 
 ## Status
 
-Roughly **85%** of the code on this roadmap is built and tested. What is left is
+Roughly **95%** of the code on this roadmap is built and tested. What is left is
 mostly the parts that are not code — documentation, publishing, and upstream
 work — plus four features.
 
 | Phase | State |
 | --- | --- |
 | P0 Core contract | Shipped. IR, plugin surface, error contract, application context, testing utilities, CI. |
-| P1 Identity and security | Shipped except OIDC/social sign-in and JWT. Sessions, credentials, roles, scopes, object-level permissions, admin auth, email. |
+| P1 Identity and security | Shipped. OIDC, social sign-in, JWT, sessions, credentials, roles, scopes, object-level permissions, admin auth, email. |
 | P2 Data layer and services | Shipped. Transactions, F-expressions, relations, many-to-many, mixins, soft delete, aggregation, cursor pagination, application services, per-tool agent scopes. |
 | P3 Developer experience | Shipped. Typed client, `generate crud`, `seed`, scaffolding, admin, inspection commands. |
 | P4 Batteries | Shipped. Jobs, email, storage, cache, rate limiting, realtime, MCP resources, full-text search. |
@@ -36,8 +36,7 @@ work — plus four features.
 
 1. **Published to npm.** Everything else is unusable by anyone else until this happens.
 2. **A documentation site.** The README carries more than it should.
-3. **OIDC and social sign-in, JWT.** Sessions cover the common case; these cover the rest.
-4. **Elysia upstream contributions.** Direction-aware schema types and route introspection are the two candidates the architecture has actually run into.
+3. **Elysia upstream contributions.** Direction-aware schema types and route introspection are the two candidates the architecture has actually run into.
 
 The percentage is a poor summary of the remaining work: publishing and docs are
 small in code and large in whether the project is usable by anyone else.

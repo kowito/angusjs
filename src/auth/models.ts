@@ -91,4 +91,38 @@ export const VerificationToken = defineModel('verificationToken', {
 export type VerificationTokenRow = typeof VerificationToken.$row
 
 /** Every model the auth app owns, for `defineApp({ models })` and migrations. */
-export const authModels = { User, Session, VerificationToken }
+
+/**
+ * A provider identity linked to a user.
+ *
+ * Keyed on `(provider, subject)` rather than on email, because the provider's
+ * subject is the only thing that is stable: people change their email address,
+ * and reusing an address as the key means the account follows the address to
+ * whoever holds it next.
+ */
+export const SocialAccount = defineModel('socialAccount', {
+  fields: {
+    user: f.foreignKey(() => User, { onDelete: 'cascade' }),
+    /** `google`, `github`, and so on. */
+    provider: f.char({ maxLength: 40 }),
+    /** The provider's own id for this person. */
+    subject: f.char({ maxLength: 255 }),
+    email: f.email({ blank: true, default: '' }),
+    name: f.char({ maxLength: 150, blank: true, default: '' }),
+    avatarUrl: f.url({ blank: true, default: '' }),
+    createdAt: f.datetime({ autoNowAdd: true }),
+    lastLoginAt: f.datetime({ null: true }),
+  },
+  meta: {
+    tableName: 'auth_social_accounts',
+    ordering: ['provider'],
+    verboseName: 'social account',
+    // One row per provider identity. Without it a repeated callback creates a
+    // second link and the account silently forks.
+    uniqueTogether: [['provider', 'subject']],
+  },
+})
+
+export type SocialAccountRow = typeof SocialAccount.$row
+
+export const authModels = { User, Session, VerificationToken, SocialAccount }

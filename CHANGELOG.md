@@ -5,6 +5,26 @@ contain breaking changes; those are listed first in each entry.
 
 ## Unreleased
 
+### Added — JWT, OIDC and social sign-in
+
+`signJwt` / `verifyJwt` for shared-secret tokens, and `verifyJwtWithJwks` for
+the RS256 and ES256 tokens an OIDC provider issues. The algorithm always comes
+from the verifier, never from the token's own header — that header is
+attacker-controlled, and trusting it is the classic JWT vulnerability.
+
+`socialAuthRoutes` adds sign-in with Google, GitHub or Microsoft: PKCE, `state`
+and `nonce` on the way out, all three checked on the way back, then an ordinary
+Angus session. The session is deliberately the normal one — proving identity
+through a provider should leave nothing downstream caring how you arrived.
+
+The default link policy is `verified-email`: a provider's address links to an
+existing account only when the provider verified it. The alternative is account
+takeover by registration — sign up at the provider with someone else's address
+and log in as them. `any-email` relaxes it and has to be asked for by name.
+
+Angus's own sessions stay opaque and database-backed. A JWT is valid until it
+expires and nothing revokes it in the meantime.
+
 ### Added — OpenTelemetry tracing
 
 Traces spanning service → query, so the question a slow request always raises —
