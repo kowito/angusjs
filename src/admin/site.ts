@@ -91,7 +91,16 @@ export class AdminSite {
    * than under the project's API prefix — the admin is a UI, not an endpoint.
    */
   app(name = 'admin'): AngusApp {
-    return defineApp({ name, prefix: this.path, absolutePrefix: true, urls: this.router() })
+    return defineApp({
+      name,
+      prefix: this.path,
+      absolutePrefix: true,
+      urls: this.router(),
+      // Declared, because every admin route carries the built-in fail-closed
+      // guard: an inspector counting permissions cannot tell a configured
+      // check from that default.
+      meta: { admin: true, guarded: (this.permissions?.length ?? 0) > 0 },
+    })
   }
 
   // -------------------------------------------------------------------------

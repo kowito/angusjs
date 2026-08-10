@@ -5,6 +5,55 @@ contain breaking changes; those are listed first in each entry.
 
 ## Unreleased
 
+### Added — production layer
+
+**Security.** `csrf()`, `securityHeaders()` and `cors()`, on by default where
+appropriate. CSRF applies only to *ambient* credentials: a cookie is ambient, an
+`Authorization` header is not, because an attacker's page cannot make the
+browser attach one — so cookie-authenticated writes must prove same-origin and
+bearer clients are unaffected. `cors({ origin: '*', credentials: true })` now
+throws at configuration time rather than producing a combination browsers reject
+and that would defeat the CSRF check.
+
+**Rate limiting.** `throttle()` with a `ThrottleStore` interface and an
+in-memory default, tighter rules on login, registration and password reset.
+Enabled automatically in production only: five attempts per five minutes is
+right against credential stuffing and wrong while building a login form.
+
+**Health probes.** `/healthz` (liveness) deliberately touches nothing external —
+if it checked the database, one blip would fail every replica and the
+orchestrator would restart them all. `/readyz` (readiness) does check, plus any
+custom checks, so a struggling instance leaves the pool without being killed.
+
+**Observability.** A request id on every response, preserving an inbound
+`x-request-id` so a trace survives across services, and one structured log line
+per request with method, path, status and duration.
+
+**Graceful shutdown.** `stop()` drains in-flight requests up to
+`server.shutdownTimeoutMs` before closing the database, so a rolling deploy
+doesn't 502 requests that were already in progress.
+
+**Typed configuration.** `defineEnv()` validates the environment once at import
+and reports every problem at once, so a missing variable fails at boot rather
+than at the first request that needed it.
+
+**Deployment audit.** `angus check --deploy` reports what is invisible in
+development and expensive in production — debug mode, an unguarded admin,
+disabled CSRF or throttling, SQLite on an ephemeral filesystem, an in-memory
+rate-limit store behind several replicas. Findings carry stable ids that can be
+silenced deliberately, and the command exits non-zero on any error.
+
+**Migration safety.** `angus migrate --check` exits non-zero when migrations are
+unapplied, so a pipeline can refuse to promote a build; `--dry-run` prints the
+SQL without executing it. Both are safe in CI.
+
+**Deployment scaffolding.** `startproject` now writes a multi-stage `Dockerfile`
+that runs as a non-root user with a liveness-only healthcheck, a
+`.dockerignore`, and a `.env.example`.
+
+**App metadata.** `AppConfig.meta` lets an app declare structured facts for
+tooling that inspects a project without running it.
+
 ### Added
 
 **Application services** — the fourth primitive, alongside models, serializers

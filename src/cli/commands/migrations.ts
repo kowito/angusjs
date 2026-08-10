@@ -128,7 +128,22 @@ export async function makemigrations(project: LoadedProject, args: string[]): Pr
   return 0
 }
 
-export async function migrate(project: LoadedProject): Promise<number> {
+/** Migration files on disk, in the order drizzle-kit recorded them. */
+async function pendingMigrations(project: LoadedProject): Promise<string[]> {
+  const settings = resolveSettings(project.settings)
+  const journalPath = resolve(project.root, settings.migrationsDir, 'meta/_journal.json')
+  if (!(await Bun.file(journalPath).exists())) return []
+
+  const journal = (await Bun.file(journalPath).json()) as { entries?: { tag: string }[] }
+  return (journal.entries ?? []).map((entry) => entry.tag)
+}
+
+/**
+ * `--check` exits non-zero when anything is unapplied, so a deploy pipeline can
+ * refuse to promote a build whose migrations have not been run.
+ * `--dry-run` prints the SQL instead of executing it.
+ */
+export async function migrate(project: LoadedProject, args: string[] = []): Promise<number> {
   const { dialect, url } = assertDatabase(project)
   const settings = resolveSettings(project.settings)
   const migrationsFolder = resolve(project.root, settings.migrationsDir)
@@ -138,7 +153,39 @@ export async function migrate(project: LoadedProject): Promise<number> {
     return 0
   }
 
-  info(`Applying migrations to ${dim(url)}`)
+  if (args.includes('--dry-run')) {
+    const tags = await pendingMigrations(project)
+    info(`${tags.length} migration file(s) in ${settings.migrationsDir}/:\n`)
+    for (const tag of tags) {
+      const sqlPath = resolve(migrationsFolder, `${tag}.sql`)
+      if (!(await Bun.file(sqlPath).exists())) continue
+      info(dim(`-- ${tag}.sql`))
+      console.log(await Bun.file(sqlPath).text())
+    }
+    info(dim('Nothing was applied (--dry-run).'))
+    return 0
+  }
+
+  const checkOnly = args.includes('--check')
+
+  info(`${checkOnly ? 'Checking' : 'Applying'} migrations against ${dim(url)}`)
+
+  // `--check` must not mutate, so it counts what the migrator has recorded
+  // rather than running it.
+  if (checkOnly) {
+    const applied = await appliedCount(dialect, url)
+    const total = (await pendingMigrations(project)).length
+    const outstanding = total - applied
+
+    if (outstanding > 0) {
+      fail(`${outstanding} migration(s) are not applied (${applied}/${total}).`)
+      info(dim('  Run `angus migrate` before serving traffic.'))
+      return 1
+    }
+
+    success(`Database is up to date (${applied}/${total} applied).`)
+    return 0
+  }
 
   if (dialect === 'sqlite') {
     const { Database } = await import('bun:sqlite')
@@ -159,6 +206,33 @@ export async function migrate(project: LoadedProject): Promise<number> {
 
   success('Database is up to date.')
   return 0
+}
+
+/** Reads the migrator's own bookkeeping table. Zero if it does not exist yet. */
+async function appliedCount(dialect: Dialect, url: string): Promise<number> {
+  if (dialect === 'sqlite') {
+    const { Database } = await import('bun:sqlite')
+    const client = new Database(url)
+    try {
+      const row = client.query('SELECT count(*) AS n FROM __drizzle_migrations').get() as { n: number } | null
+      return row?.n ?? 0
+    } catch {
+      return 0
+    } finally {
+      client.close()
+    }
+  }
+
+  const { SQL } = await import('bun')
+  const client = new SQL({ url })
+  try {
+    const rows = (await client`SELECT count(*)::int AS n FROM drizzle.__drizzle_migrations`) as { n: number }[]
+    return rows[0]?.n ?? 0
+  } catch {
+    return 0
+  } finally {
+    await client.close()
+  }
 }
 
 /** Removes the generated bridge files. */

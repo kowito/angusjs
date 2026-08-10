@@ -49,7 +49,8 @@ Angus sits one layer above and supplies the application conventions most product
 │                    Angus                     │
 │                                              │
 │  Models · QuerySets · Serializers · ViewSets │
-│  Permissions · Admin · OpenAPI · MCP · CLI   │
+│  Services · Auth · Admin · OpenAPI · MCP     │
+│  Security · Throttling · Health · CLI        │
 ├──────────────────────────────────────────────┤
 │                   Elysia                     │
 │                                              │
@@ -332,6 +333,61 @@ Social login (OIDC) is the remaining piece — see [ROADMAP.md](ROADMAP.md).
 
 ---
 
+## Production
+
+Security, observability and rate limiting are configured in one place and audited by one command.
+
+```ts
+export default defineSettings({
+  apps: [...],
+  security: {
+    cors: { origin: ['https://app.example.com'], credentials: true },
+    // headers and csrf are on by default
+  },
+  throttle: { store: redisStore },   // on automatically in production
+  health: { version: process.env.GIT_SHA },
+  server: { shutdownTimeoutMs: 10_000 },
+})
+```
+
+**CSRF** applies to *ambient* credentials only. A cookie is ambient; an `Authorization` header is not, because an attacker's page cannot make the browser attach one. So cookie-authenticated writes must prove same-origin, and bearer-token clients are unaffected.
+
+**Health probes are split on purpose.** `/healthz` (liveness) never touches the database — if it did, a database blip would fail every replica at once and the orchestrator would restart them all, turning a recoverable outage into a total one. `/readyz` (readiness) does check, so an instance that can't serve is pulled from the pool without being killed.
+
+**Rate limiting defaults to production only.** Five login attempts per five minutes is right against credential stuffing and wrong while you're building the login form.
+
+**Graceful shutdown** drains in-flight requests before closing, so a rolling deploy doesn't return 502s for requests that were already in progress.
+
+Every response carries an `x-request-id` — an inbound one is preserved, so a trace survives across services — and one structured log line per request.
+
+### Typed configuration
+
+```ts
+export const env = defineEnv(t.Object({
+  DATABASE_URL: t.String({ minLength: 1 }),
+  SESSION_SECRET: t.String({ minLength: 32 }),
+  PORT: t.Optional(t.Numeric({ default: 8000 })),
+}))
+```
+
+Validated once at import, naming *every* problem at once, so a missing variable fails at boot rather than at the first request that needed it.
+
+### The deployment audit
+
+```bash
+angus check --deploy      # exits non-zero on any error
+angus migrate --check     # exits non-zero if migrations are unapplied
+angus migrate --dry-run   # prints the SQL without running it
+```
+
+`check --deploy` reports what is safe in development and dangerous in production: debug mode leaking stack traces, an admin with no authentication, CSRF or throttling disabled, SQLite where the filesystem is ephemeral, an in-memory rate-limit store behind multiple replicas. Each finding has a stable id you can silence deliberately.
+
+Both commands are configuration-only — no server, no database writes — so they belong in CI.
+
+`angus startproject` also writes a `Dockerfile` (multi-stage, non-root, liveness healthcheck), a `.dockerignore` and a `.env.example`.
+
+---
+
 ## CLI
 
 | Command | Description |
@@ -340,10 +396,10 @@ Social login (OIDC) is the remaining piece — see [ROADMAP.md](ROADMAP.md).
 | `angus startapp <name>` | Scaffold an app inside the project |
 | `angus runserver` | Development server |
 | `angus makemigrations` | Generate migrations from your models |
-| `angus migrate` | Apply pending migrations |
+| `angus migrate [--check\|--dry-run]` | Apply migrations; verify or preview them |
 | `angus routes` | Print the URL table |
 | `angus models` | Print every model and its columns |
-| `angus check` | Validate the project without starting it |
+| `angus check [--deploy]` | Validate the project; `--deploy` audits production settings |
 | `angus openapi [--out]` | Print or write the OpenAPI document |
 | `angus mcp [--list]` | Serve the API to agents over MCP |
 | `angus run <service>` | Invoke an application service |
@@ -404,7 +460,7 @@ test('lists products', () => transactional(async () => {
 
 Under active development, pre-1.0. APIs may change.
 
-**Shipped:** models, migrations, QuerySets with typed lookups, transactions and F-expressions, serializers, views and view sets, application services, identity and authorization, admin (with login), OpenAPI, MCP, testing utilities, an Elysia plugin surface, and the CLI. 323 tests, clean typecheck.
+**Shipped:** models, migrations, QuerySets with typed lookups, transactions and F-expressions, serializers, views and view sets, application services, identity and authorization, admin (with login), OpenAPI, MCP, testing utilities, an Elysia plugin surface, the production layer (CSRF, security headers, CORS, throttling, health probes, request ids, graceful shutdown, typed config, deployment audit), and the CLI. 359 tests, clean typecheck.
 
 **Next:** reverse relations and `prefetchRelated`, many-to-many, typed client generation, then email, jobs and storage.
 

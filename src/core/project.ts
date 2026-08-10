@@ -15,7 +15,11 @@ import { generateOpenApi, renderDocs, type OpenApiDocument } from '../openapi/in
 import { joinPath, Router } from '../routing/router.ts'
 import { appModels, type AngusApp } from './app.ts'
 import { errorTranslation } from './errors.ts'
-import { resolveSettings, type ResolvedSettings, type Settings } from './settings.ts'
+import { health, observability } from './observability.ts'
+import { cors, csrf, securityHeaders } from '../http/security.ts'
+import { defaultThrottleRules, throttle } from '../http/throttle.ts'
+import { disconnect } from '../db/connection.ts'
+import { resolveSettings, type ResolvedSettings, type Settings, type ThrottleSettings } from './settings.ts'
 
 export interface BuildOptions {
   /** Skip opening the database — useful when a test already connected one. */
@@ -136,6 +140,18 @@ export async function createApp(rawSettings: Settings, options: BuildOptions = {
 
   elysia.use(errorTranslation({ debug: settings.debug }))
 
+  // Ordering is deliberate. Observability wraps everything so even rejected
+  // requests are logged with an id. Security runs before routing so a
+  // cross-site write never reaches a handler. Throttling runs after the
+  // identity hook, which is why it lives further down.
+  if (settings.observability !== false) elysia.use(observability(settings.observability ?? {}))
+  if (settings.health !== false) elysia.use(health(settings.health ?? {}))
+
+  const security = settings.security ?? {}
+  if (security.headers !== false) elysia.use(securityHeaders(security.headers ?? {}))
+  if (security.cors) elysia.use(cors(security.cors))
+  if (security.csrf !== false) elysia.use(csrf(security.csrf ?? {}))
+
   const docs = openApiRoutes(settings, rawSettings)
   if (docs) elysia.use(docs)
 
@@ -153,6 +169,29 @@ export async function createApp(rawSettings: Settings, options: BuildOptions = {
     }))
   }
 
+  // Rate limiting defaults to production only. The limits that make sense
+  // against credential stuffing — five login attempts per five minutes — would
+  // lock a developer out of their own app while they were building it, and a
+  // laptop is not the target of a brute-force campaign. `angus check --deploy`
+  // verifies it is actually on where it matters.
+  const throttleEnabled =
+    settings.throttle === false ? false : (settings.throttle ?? null) !== null || Bun.env.NODE_ENV === 'production'
+
+  // After `authenticate`, so a limit can be keyed by user rather than by IP.
+  if (throttleEnabled) {
+    const configured = (settings.throttle === false ? {} : (settings.throttle ?? {})) as ThrottleSettings
+    elysia.use(
+      throttle({
+        ...configured,
+        rules: configured.rules ?? defaultThrottleRules(settings.prefix),
+        exempt: configured.exempt ?? [
+          settings.health === false ? '\0none' : (settings.health?.livenessPath ?? '/healthz'),
+          settings.health === false ? '\0none' : (settings.health?.readinessPath ?? '/readyz'),
+        ],
+      }),
+    )
+  }
+
   elysia.use(projectRouter(settings.apps, settings.prefix).toElysia({ name: 'angus:urls' }))
 
   return elysia
@@ -164,7 +203,14 @@ export interface RunningServer {
   stop(): Promise<void>
 }
 
-/** Builds the app and binds it to a port. */
+/**
+ * Builds the app and binds it to a port.
+ *
+ * `stop()` drains rather than cutting: it stops accepting connections, gives
+ * in-flight requests until `shutdownTimeoutMs` to finish, then closes the
+ * database. Without the drain, a rolling deploy returns 502s for every request
+ * that happened to be in progress.
+ */
 export async function runServer(rawSettings: Settings): Promise<RunningServer> {
   const settings = resolveSettings(rawSettings)
   const app = await createApp(rawSettings)
@@ -173,11 +219,31 @@ export async function runServer(rawSettings: Settings): Promise<RunningServer> {
 
   const url = `http://${settings.server.hostname === '0.0.0.0' ? 'localhost' : settings.server.hostname}:${settings.server.port}`
 
+  let stopping: Promise<void> | undefined
+
   return {
     app,
     url,
-    async stop() {
-      await app.stop()
+    stop() {
+      // Idempotent: SIGINT and SIGTERM can both arrive.
+      return (stopping ??= (async () => {
+        // `false` means "let in-flight requests finish".
+        await app.stop(false)
+
+        const deadline = Date.now() + settings.server.shutdownTimeoutMs
+        while (Date.now() < deadline) {
+          const pending = (app.server?.pendingRequests ?? 0) as number
+          if (pending === 0) break
+          await Bun.sleep(50)
+        }
+
+        const remaining = (app.server?.pendingRequests ?? 0) as number
+        if (remaining > 0) {
+          console.warn(`angus: ${remaining} request(s) still in flight after the shutdown timeout; closing anyway.`)
+        }
+
+        await disconnect()
+      })())
     },
   }
 }

@@ -9,10 +9,11 @@ import { resolve } from 'node:path'
 import { appModels } from '../../core/app.ts'
 import type { LoadedProject } from '../../core/config.ts'
 import { projectRouter, projectSpec } from '../../core/project.ts'
+import { deployChecks, hasBlockingFindings, type Finding } from '../../core/deploy.ts'
 import { resolveSettings } from '../../core/settings.ts'
 import { connect } from '../../db/connection.ts'
 import type { FieldMap } from '../../db/model.ts'
-import { bold, cyan, dim, green, info, magenta, success, table, warn, yellow } from '../ui.ts'
+import { bold, cyan, dim, green, info, magenta, red, success, table, warn, yellow } from '../ui.ts'
 
 const METHOD_COLOURS: Record<string, (text: string) => string> = {
   GET: green,
@@ -109,8 +110,52 @@ export async function models(project: LoadedProject): Promise<number> {
   return 0
 }
 
+const SEVERITY_STYLE: Record<Finding['severity'], (text: string) => string> = {
+  error: red,
+  warning: yellow,
+  info: cyan,
+}
+
+/**
+ * `--deploy` adds the production audit: settings that are harmless in
+ * development and dangerous in production.
+ */
+async function deploy(project: LoadedProject, args: string[]): Promise<number> {
+  const findings = deployChecks(project.settings, { production: args.includes('--production') })
+
+  if (findings.length === 0) {
+    success('No deployment issues found.')
+    return 0
+  }
+
+  const counts = { error: 0, warning: 0, info: 0 }
+  for (const finding of findings) counts[finding.severity]++
+
+  for (const severity of ['error', 'warning', 'info'] as const) {
+    const group = findings.filter((finding) => finding.severity === severity)
+    if (group.length === 0) continue
+
+    info('')
+    for (const finding of group) {
+      info(`${SEVERITY_STYLE[severity](severity.toUpperCase())}  ${finding.message}`)
+      info(`       ${dim(finding.id)}`)
+      if (finding.hint) info(`       ${dim(finding.hint)}`)
+    }
+  }
+
+  info('')
+  info(
+    `${counts.error} error(s), ${counts.warning} warning(s), ${counts.info} note(s). ` +
+      dim('Silence one with deployChecks({ silence: [id] }).'),
+  )
+
+  return hasBlockingFindings(findings) ? 1 : 0
+}
+
 /** Validates the project without starting it — the pre-flight check. */
-export async function check(project: LoadedProject): Promise<number> {
+export async function check(project: LoadedProject, args: string[] = []): Promise<number> {
+  if (args.includes('--deploy')) return deploy(project, args)
+
   const problems: string[] = []
   const settings = resolveSettings(project.settings)
 

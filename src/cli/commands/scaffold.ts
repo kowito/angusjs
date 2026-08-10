@@ -160,6 +160,61 @@ console.log(\`Listening on \${server.url}\`)
   )
 
   await writeFile(
+    resolve(root, 'Dockerfile'),
+    `# Multi-stage so the runtime image carries no build tooling.
+FROM oven/bun:1 AS deps
+WORKDIR /app
+COPY package.json bun.lock* ./
+RUN bun install --frozen-lockfile --production
+
+FROM oven/bun:1 AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+# Never run as root: a container escape should not start as uid 0.
+USER bun
+
+EXPOSE 8000
+
+# Liveness only — it must not touch the database, or a database blip would
+# restart every replica at once. See /readyz for readiness.
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \\
+  CMD bun -e "fetch('http://127.0.0.1:8000/healthz').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+
+CMD ["bun", "run", "main.ts"]
+`,
+  )
+
+  await writeFile(
+    resolve(root, '.dockerignore'),
+    `node_modules
+.angus
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+.env
+.git
+.github
+**/*.test.ts
+`,
+  )
+
+  await writeFile(
+    resolve(root, '.env.example'),
+    `# Copy to .env and fill in. \`angus check --deploy\` verifies the result.
+NODE_ENV=development
+
+# Postgres in production; SQLite is the default for local work.
+# DATABASE_URL=postgres://user:password@localhost:5432/${name}
+
+PORT=8000
+`,
+  )
+
+  await writeFile(
     resolve(root, '.gitignore'),
     `node_modules/
 .angus/

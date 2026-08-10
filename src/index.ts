@@ -101,6 +101,17 @@ export { service, callService, getService, registeredServices } from './services
 export type { AnyService, CallOptions, Service, ServiceConfig, ServiceContext } from './services/index.ts'
 export { fromService } from './services/route.ts'
 
+// Production: security, throttling, observability, configuration
+export { cors, csrf, securityHeaders } from './http/security.ts'
+export type { CorsOptions, CsrfOptions, SecurityHeaderOptions } from './http/security.ts'
+export { defaultThrottleRules, MemoryThrottleStore, throttle } from './http/throttle.ts'
+export type { ThrottleOptions, ThrottleRule, ThrottleStore } from './http/throttle.ts'
+export { health, observability, REQUEST_ID_HEADER } from './core/observability.ts'
+export type { HealthOptions, ObservabilityOptions, RequestLogFields } from './core/observability.ts'
+export { defineEnv, describeEnv, env, ConfigurationError } from './core/env.ts'
+export { deployChecks, hasBlockingFindings } from './core/deploy.ts'
+export type { Finding, Severity } from './core/deploy.ts'
+
 // HTTP
 export {
   APIError,

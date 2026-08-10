@@ -10,10 +10,19 @@ import type { Elysia } from 'elysia'
 import type { DatabaseConfig } from '../db/connection.ts'
 import type { Context, Permission } from '../routing/router.ts'
 import type { AngusApp } from './app.ts'
+import type { CorsOptions, CsrfOptions, SecurityHeaderOptions } from '../http/security.ts'
+import type { ThrottleOptions } from '../http/throttle.ts'
+import type { HealthOptions, ObservabilityOptions } from './observability.ts'
 
 export interface ServerSettings {
   port?: number
   hostname?: string
+  /**
+   * How long to let in-flight requests finish on SIGTERM, in milliseconds.
+   * Set it below your orchestrator's kill timeout, or the pod is killed
+   * mid-request anyway. Defaults to 10s.
+   */
+  shutdownTimeoutMs?: number
 }
 
 export interface OpenApiSettings {
@@ -75,7 +84,30 @@ export interface Settings {
   debug?: boolean
   /** Where migration SQL lives, relative to the project root. Defaults to `migrations`. */
   migrationsDir?: string
+
+  /**
+   * Security, observability and rate limiting. Every entry is opt-in with a
+   * production-appropriate default, and `angus check --deploy` reports which
+   * are missing before you find out the hard way.
+   */
+  security?: SecuritySettings
+  observability?: ObservabilitySettings | false
+  throttle?: ThrottleSettings | false
+  health?: HealthSettings | false
 }
+
+export interface SecuritySettings {
+  /** Response headers: HSTS, CSP, frame options. Defaults to on. */
+  headers?: SecurityHeaderOptions | false
+  /** CSRF for cookie-authenticated writes. Defaults to on. */
+  csrf?: CsrfOptions | false
+  /** Cross-origin access. Off unless configured — a same-origin API needs none. */
+  cors?: CorsOptions
+}
+
+export interface ObservabilitySettings extends ObservabilityOptions {}
+export interface ThrottleSettings extends ThrottleOptions {}
+export interface HealthSettings extends HealthOptions {}
 
 export interface ResolvedSettings extends Settings {
   server: Required<ServerSettings>
@@ -104,6 +136,7 @@ export function resolveSettings(settings: Settings): ResolvedSettings {
     server: {
       port: settings.server?.port ?? Number(Bun.env.PORT ?? 8000),
       hostname: settings.server?.hostname ?? Bun.env.HOST ?? '0.0.0.0',
+      shutdownTimeoutMs: settings.server?.shutdownTimeoutMs ?? 10_000,
     },
     prefix: settings.prefix ?? '',
     middleware: settings.middleware ?? [],

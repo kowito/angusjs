@@ -50,7 +50,8 @@ const COMMANDS: Record<string, Command> = {
   },
   migrate: {
     summary: 'Apply pending migrations to the database',
-    run: ({ project }) => migrate(project!),
+    usage: 'angus migrate [--check] [--dry-run]',
+    run: ({ project, args }) => migrate(project!, args),
   },
   routes: {
     summary: 'Print the URL table',
@@ -72,7 +73,8 @@ const COMMANDS: Record<string, Command> = {
   },
   check: {
     summary: 'Validate the project without starting it',
-    run: ({ project }) => check(project!),
+    usage: 'angus check [--deploy] [--production]',
+    run: ({ project, args }) => check(project!, args),
   },
   run: {
     summary: 'Invoke an application service',
