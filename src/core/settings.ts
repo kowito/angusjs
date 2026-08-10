@@ -15,6 +15,7 @@ import type { ThrottleOptions } from '../http/throttle.ts'
 import type { HealthOptions, ObservabilityOptions } from './observability.ts'
 import type { EmailSettings } from '../email/index.ts'
 import type { StorageSettings } from '../storage/index.ts'
+import type { CacheSettings } from '../cache/index.ts'
 
 export interface ServerSettings {
   port?: number
@@ -103,6 +104,8 @@ export interface Settings {
   email?: EmailSettings
   /** Where uploaded files go. Without it, `f.file()` columns cannot be written. */
   storage?: StorageSettings
+  /** Shared cache. Defaults to an in-process store. */
+  cache?: CacheSettings
 }
 
 export interface SecuritySettings {

@@ -38,6 +38,8 @@ export { connect, disconnect, getConnection } from './db/connection.ts'
 export { atomic, inTransaction, rollbackAfter, Rollback } from './db/transaction.ts'
 export { F, FExpression } from './db/expressions.ts'
 export { manyToMany } from './db/manyToMany.ts'
+export { invalidateCacheOnWrite, onModel, onModelAny } from './db/hooks.ts'
+export type { Hook, HookContext, HookEvent } from './db/hooks.ts'
 export type { ManyToMany } from './db/manyToMany.ts'
 export { DoesNotExist, IntegrityError, MultipleObjectsReturned } from './db/errors.ts'
 
@@ -106,6 +108,19 @@ export {
   startWorker,
 } from './jobs/index.ts'
 export type { EnqueueOptions, JobDefinition, JobRow, QueueStats, RunResult, Worker, WorkerOptions } from './jobs/index.ts'
+
+// Cache
+export {
+  cached,
+  cacheResponses,
+  createCache,
+  getCache,
+  invalidateModels,
+  MemoryCacheStore,
+  modelTag,
+  setCache,
+} from './cache/index.ts'
+export type { Cache, CacheSettings, CacheStore } from './cache/index.ts'
 
 // File storage
 export {

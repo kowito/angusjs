@@ -197,6 +197,15 @@ export function deployChecks(rawSettings: Settings, options: DeployCheckOptions 
     add('warning', 'email-no-sender', 'No default sender is configured.', 'Set `email.from`.')
   }
 
+  if (settings.cache?.store && settings.cache.store.name === 'memory') {
+    add(
+      'info',
+      'cache-memory-store',
+      'The cache uses the in-memory store, which is per process.',
+      'Correct but wasteful across replicas: each keeps its own copy and an invalidation only clears one.',
+    )
+  }
+
   // --- observability -------------------------------------------------------
 
   if (settings.health === false) {

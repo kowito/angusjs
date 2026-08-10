@@ -21,6 +21,7 @@ import { defaultThrottleRules, throttle } from '../http/throttle.ts'
 import { disconnect } from '../db/connection.ts'
 import { createMailer, setMailer } from '../email/index.ts'
 import { setStorage } from '../storage/index.ts'
+import { createCache, setCache } from '../cache/index.ts'
 import { resolveSettings, type ResolvedSettings, type Settings, type ThrottleSettings } from './settings.ts'
 
 export interface BuildOptions {
@@ -139,6 +140,7 @@ export async function createApp(rawSettings: Settings, options: BuildOptions = {
   // Installed before `ready()`, so an app can send during startup.
   setMailer(createMailer(settings.email ?? {}))
   setStorage(settings.storage)
+  setCache(createCache(settings.cache ?? {}))
 
   for (const app of settings.apps) await app.ready?.()
 

@@ -10,6 +10,7 @@ import { asc, avg, count as countAgg, desc, eq, max as maxAgg, min as minAgg, su
 import { getConnection, type Connection } from './connection.ts'
 import { isFExpression } from './expressions.ts'
 import { activeDb } from './transaction.ts'
+import { hasHooks, runHooks } from './hooks.ts'
 import { attachPrefetches, resolvePrefetch, type PrefetchMap, type PrefetchResult, type ResolvedPrefetch } from './prefetch.ts'
 import { DoesNotExist, MultipleObjectsReturned } from './errors.ts'
 import { buildCondition, combine, Q, type Filter, type OrderBy, type QCondition, type ResolveContext } from './lookups.ts'
@@ -404,11 +405,25 @@ export class QuerySet<M extends AnyModel, R = RowOf<M>> implements PromiseLike<R
     if (rows.length === 0) return []
     const connection = getConnection()
     const table = connection.table(this.model)
+
     const values = rows.map((row) => this.toColumns(row as Record<string, unknown>, 'insert'))
-    return (await activeDb(connection)
+
+    for (const entry of values) {
+      await runHooks({ model: this.model, event: 'beforeCreate', values: entry })
+    }
+
+    const created = (await activeDb(connection)
       .insert(table)
       .values(values)
       .returning(this.fullSelection(connection))) as RowOf<M>[]
+
+    await runHooks({
+      model: this.model,
+      event: 'afterCreate',
+      rows: created as Record<string, unknown>[],
+    })
+
+    return created
   }
 
   /** Updates every matching row. Returns the updated rows. */
@@ -419,10 +434,21 @@ export class QuerySet<M extends AnyModel, R = RowOf<M>> implements PromiseLike<R
     const values = this.toColumns(data as Record<string, unknown>, 'update', table)
     if (Object.keys(values).length === 0) return []
 
+    await runHooks({ model: this.model, event: 'beforeUpdate', values })
+
     let query = activeDb(connection).update(table).set(values).$dynamic()
     const where = this.where(ctx)
     if (where) query = query.where(where)
-    return (await query.returning(this.fullSelection(connection))) as RowOf<M>[]
+    const updated = (await query.returning(this.fullSelection(connection))) as RowOf<M>[]
+
+    await runHooks({
+      model: this.model,
+      event: 'afterUpdate',
+      values,
+      rows: updated as Record<string, unknown>[],
+    })
+
+    return updated
   }
 
   /** Deletes every matching row. Returns how many went. */
@@ -431,11 +457,28 @@ export class QuerySet<M extends AnyModel, R = RowOf<M>> implements PromiseLike<R
     const ctx = this.context(connection)
     const table = connection.table(this.model)
 
+    // A beforeDelete hook usually needs to see what is about to go, and after
+    // the DELETE it is too late — so the rows are read first, but only when
+    // something is actually listening.
+    const doomed = hasHooks(this.model, 'beforeDelete')
+      ? ((await this.deriveAs<Record<string, unknown>>({ fields: undefined }).execute()) as Record<string, unknown>[])
+      : []
+
+    if (doomed.length > 0) {
+      await runHooks({ model: this.model, event: 'beforeDelete', rows: doomed })
+    }
+
     let query = activeDb(connection).delete(table).$dynamic()
     const where = this.where(ctx)
     if (where) query = query.where(where)
     const deleted = await query.returning({ id: table[this.model.columns[this.model.pk]!] })
-    return Array.isArray(deleted) ? deleted.length : 0
+    const count = Array.isArray(deleted) ? deleted.length : 0
+
+    if (count > 0) {
+      await runHooks({ model: this.model, event: 'afterDelete', rows: doomed })
+    }
+
+    return count
   }
 
   /**

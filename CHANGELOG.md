@@ -5,6 +5,22 @@ contain breaking changes; those are listed first in each entry.
 
 ## Unreleased
 
+### Added — cache and model hooks
+
+`cached()`, `getCache()`, `cacheResponses()` and a `CacheStore` interface with an
+in-memory default. `getOrSet` shares one in-flight computation per key, so a hot
+key expiring does not make every concurrent request recompute it. Tags group
+entries so one write clears everything derived from a model.
+
+Model hooks — `onModel(Post, 'beforeCreate', ...)` — fire on ORM writes, with
+`before` hooks able to reshape the payload and `beforeDelete` seeing the rows
+about to go. `invalidateCacheOnWrite(Model)` wires the two together in a line.
+Hooks do not fire for raw SQL or migrations, and say so.
+
+`cacheResponses()` skips authenticated requests unless `varyByUser` is set:
+caching a personalised response under a shared key is a data leak, not a
+performance bug.
+
 ### Added — file storage
 
 `f.file()` and `f.image()` as IR field kinds, so validation, the admin widget

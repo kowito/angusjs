@@ -21,6 +21,7 @@
     "./email": "./src/email/index.ts",
     "./jobs": "./src/jobs/index.ts",
     "./storage": "./src/storage/index.ts",
+    "./cache": "./src/cache/index.ts",
     "./admin": "./src/admin/index.ts",
     "./openapi": "./src/openapi/index.ts",
     "./client": "./src/client/index.ts",

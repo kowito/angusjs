@@ -282,6 +282,30 @@ Ambient, so a query several frames deep — inside a service, inside a model hoo
 
 `F()` refers to a column's own value, so `update({ views: F('views').add(1) })` becomes `SET views = views + 1` and concurrent increments don't lose each other.
 
+### Cache and model hooks
+
+```ts
+const summary = await cached('dashboard', () => buildSummary(), {
+  models: [Order, Customer],   // tagged, so a write to either clears it
+  ttlSeconds: 60,
+})
+
+invalidateCacheOnWrite(Order)  // one line instead of a call at every write site
+```
+
+Two things make a cache dangerous rather than useful, and both are handled here. **Stampede**: `getOrSet` shares one in-flight computation per key, so a thousand simultaneous misses do the work once. **Staleness**: tags group entries so one write clears everything derived from a model.
+
+Model hooks are what make that automatic:
+
+```ts
+onModel(Post, 'beforeCreate', ({ values }) => { values.slug ??= slugify(values.title) })
+onModel(Post, 'beforeDelete', ({ rows }) => archive(rows))
+```
+
+> Hooks fire for writes made **through the ORM**. Raw SQL, a migration, or someone with a database client will not trigger them — any ORM claiming otherwise is claiming more than it can enforce.
+
+`cacheResponses()` caches whole GET responses, and **skips authenticated requests unless `varyByUser` is set** — caching a personalised response under a shared key is a data leak, not a performance bug.
+
 ### File storage
 
 ```ts
