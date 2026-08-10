@@ -1,0 +1,150 @@
+#!/usr/bin/env bun
+/**
+ * The `angus` command.
+ *
+ * Every command except `startproject` needs the project's settings, so the
+ * config is located and loaded once here and passed down.
+ */
+
+import { loadProject, type LoadedProject } from '../core/config.ts'
+import { runServer } from '../core/project.ts'
+import { resolveSettings } from '../core/settings.ts'
+import { check, models, routes, shell } from './commands/inspect.ts'
+import { makemigrations, migrate } from './commands/migrations.ts'
+import { startapp, startproject } from './commands/scaffold.ts'
+import { bold, cyan, dim, fail, green, info } from './ui.ts'
+
+const VERSION = '0.1.0'
+
+interface Command {
+  summary: string
+  usage?: string
+  /** Commands that scaffold a new project run outside one. */
+  standalone?: boolean
+  run: (context: { project: LoadedProject | null; args: string[] }) => Promise<number>
+}
+
+const COMMANDS: Record<string, Command> = {
+  startproject: {
+    summary: 'Create a new project directory',
+    usage: 'angus startproject <name>',
+    standalone: true,
+    run: ({ args }) => startproject(args),
+  },
+  startapp: {
+    summary: 'Create a new app inside the current project',
+    usage: 'angus startapp <name>',
+    run: ({ project, args }) => startapp(project!, args),
+  },
+  runserver: {
+    summary: 'Start the development server',
+    usage: 'angus runserver [--port 8000] [--host 0.0.0.0]',
+    run: ({ project, args }) => runserver(project!, args),
+  },
+  makemigrations: {
+    summary: 'Generate migrations from your models',
+    usage: 'angus makemigrations [--name <label>]',
+    run: ({ project, args }) => makemigrations(project!, args),
+  },
+  migrate: {
+    summary: 'Apply pending migrations to the database',
+    run: ({ project }) => migrate(project!),
+  },
+  routes: {
+    summary: 'Print the URL table',
+    run: ({ project }) => routes(project!),
+  },
+  models: {
+    summary: 'Print every model and its columns',
+    run: ({ project }) => models(project!),
+  },
+  check: {
+    summary: 'Validate the project without starting it',
+    run: ({ project }) => check(project!),
+  },
+  shell: {
+    summary: 'Open a REPL with your models loaded',
+    run: ({ project }) => shell(project!),
+  },
+}
+
+async function runserver(project: LoadedProject, args: string[]): Promise<number> {
+  const settings = resolveSettings(project.settings)
+
+  const portIndex = args.indexOf('--port')
+  const hostIndex = args.indexOf('--host')
+  if (portIndex !== -1) settings.server.port = Number(args[portIndex + 1])
+  if (hostIndex !== -1) settings.server.hostname = args[hostIndex + 1]!
+
+  const server = await runServer(settings)
+
+  info(`${bold('angusjs')} ${dim(`v${VERSION}`)}`)
+  info(`${green('→')} ${bold(server.url)}`)
+  if (settings.database) info(dim(`  database  ${settings.database.url} (${settings.database.dialect})`))
+  if (settings.openapi !== false) info(dim(`  docs      ${server.url}${settings.openapi?.path ?? '/docs'}`))
+  info(dim(`  apps      ${settings.apps.map((app) => app.name).join(', ') || 'none'}`))
+  info(dim('\nPress Ctrl-C to stop.'))
+
+  // Resolve only on shutdown so the process stays alive.
+  await new Promise<void>((done) => {
+    const stop = () => {
+      info(dim('\nShutting down.'))
+      server.stop().then(() => done())
+    }
+    process.on('SIGINT', stop)
+    process.on('SIGTERM', stop)
+  })
+
+  return 0
+}
+
+function usage(): void {
+  info(`${bold('angusjs')} ${dim(`v${VERSION}`)} — Django's ergonomics on ElysiaJS\n`)
+  info(`${bold('Usage')}  angus <command> [options]\n`)
+  info(bold('Commands'))
+
+  const width = Math.max(...Object.keys(COMMANDS).map((name) => name.length))
+  for (const [name, command] of Object.entries(COMMANDS)) {
+    info(`  ${cyan(name.padEnd(width))}  ${command.summary}`)
+  }
+  info(`\nRun ${cyan('angus <command> --help')} for usage of a single command.`)
+}
+
+async function main(argv: string[]): Promise<number> {
+  const [name, ...args] = argv
+
+  if (!name || name === '--help' || name === '-h' || name === 'help') {
+    usage()
+    return 0
+  }
+
+  if (name === '--version' || name === '-v') {
+    info(VERSION)
+    return 0
+  }
+
+  const command = COMMANDS[name]
+  if (!command) {
+    fail(`Unknown command "${name}".`)
+    info('')
+    usage()
+    return 1
+  }
+
+  if (args.includes('--help') || args.includes('-h')) {
+    info(`${bold(name)} — ${command.summary}`)
+    if (command.usage) info(`\n${dim(command.usage)}`)
+    return 0
+  }
+
+  const project = command.standalone ? null : await loadProject()
+  return command.run({ project, args })
+}
+
+try {
+  process.exit(await main(Bun.argv.slice(2)))
+} catch (error) {
+  fail(error instanceof Error ? error.message : String(error))
+  if (Bun.env.ANGUS_TRACE) console.error(error)
+  process.exit(1)
+}

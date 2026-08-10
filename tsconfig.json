@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "lib": ["ESNext"],
+    "target": "ESNext",
+    "module": "Preserve",
+    "moduleDetection": "force",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "noUncheckedIndexedAccess": true,
+    "noFallthroughCasesInSwitch": true,
+    "types": ["bun-types"],
+    // Lets `examples/` import "angusjs" exactly as a real project would.
+    "baseUrl": ".",
+    "paths": {
+      "angusjs": ["./src/index.ts"],
+      "angusjs/*": ["./src/*/index.ts"]
+    }
+  },
+  "include": ["src", "examples"]
+}

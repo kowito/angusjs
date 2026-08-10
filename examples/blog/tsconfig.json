@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": "../..",
+    "paths": {
+      "angusjs": ["./src/index.ts"],
+      "angusjs/*": ["./src/*/index.ts"]
+    }
+  },
+  "include": ["."]
+}
