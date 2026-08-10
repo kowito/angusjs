@@ -10,7 +10,7 @@ import { t, type TSchema } from 'elysia'
 import { Q } from '../db/lookups.ts'
 import type { AnyModel, RowOf } from '../db/model.ts'
 import type { QuerySet } from '../db/queryset.ts'
-import { NotFound } from '../http/errors.ts'
+import { NotFound, PermissionDenied, Unauthorized } from '../http/errors.ts'
 import { pageNumberPagination, type Paginator } from '../http/pagination.ts'
 import type { Serializer } from '../serializers/index.ts'
 import { Router, type Context, type Permission } from './router.ts'
@@ -47,6 +47,23 @@ export interface ModelViewSetOptions<M extends AnyModel> {
   permissions?: Permission[]
   /** Per-action permissions, merged with the viewset-wide ones. */
   actionPermissions?: Partial<Record<ViewSetAction, Permission[]>>
+  /**
+   * Checked against the object itself, after it is loaded.
+   *
+   * A `Permission` runs before anything is fetched, so it can only ask about
+   * the caller and the URL. This asks about the row: "anyone signed in may read
+   * a post, but only its author may edit it" needs both, and neither a
+   * permission nor a scoped `queryset` can say it alone — a queryset that hid
+   * other people's posts would hide them from readers too.
+   *
+   * Pass one function to apply it to every detail action, or an object to vary
+   * it per action. Failing gives 403, the same as a route permission.
+   *
+   * When the *existence* of a row is itself confidential, scope `queryset`
+   * instead: a 403 confirms the row is there, while an out-of-scope queryset
+   * yields an honest 404.
+   */
+  objectPermissions?: ObjectPermission<M> | Partial<Record<DetailAction, ObjectPermission<M>>>
   /** Fields exposed as query filters — `?status=draft&views__gte=10`. */
   filterFields?: readonly (keyof M['fields'] & string)[]
   /** Fields scanned by `?search=` using a case-insensitive OR. */
@@ -60,6 +77,20 @@ export interface ModelViewSetOptions<M extends AnyModel> {
   hooks?: ViewSetHooks<M>
   tags?: string[]
 }
+
+/**
+ * Decides whether the caller may act on this particular row.
+ *
+ * Async so it can consult the database — object rules often depend on a
+ * relation the row does not carry, such as membership of the owning team.
+ */
+export type ObjectPermission<M extends AnyModel> = (
+  object: RowOf<M>,
+  context: Context,
+) => boolean | Promise<boolean>
+
+/** The actions that address a single row, and so can be judged against one. */
+export type DetailAction = Extract<ViewSetAction, 'retrieve' | 'update' | 'partialUpdate' | 'destroy'>
 
 /** Lookups a client may append to a filter field in the query string. */
 const QUERY_LOOKUPS = [
@@ -170,6 +201,7 @@ export function modelViewSet<M extends AnyModel>(options: ModelViewSetOptions<M>
     actions = ALL_ACTIONS,
     permissions = [],
     actionPermissions = {},
+    objectPermissions,
     filterFields = [],
     searchFields = [],
     orderingFields = [],
@@ -217,11 +249,29 @@ export function modelViewSet<M extends AnyModel>(options: ModelViewSetOptions<M>
   const withRelations = (queryset: QuerySet<M, RowOf<M>>): QuerySet<M, RowOf<M>> =>
     joins.length > 0 ? (queryset.selectRelated(...(joins as never[])) as never) : queryset
 
-  /** Fetches the object addressed by the URL, or raises 404. */
-  async function getObject(context: Context): Promise<RowOf<M>> {
+  const objectPermissionFor = (action: DetailAction): ObjectPermission<M> | undefined =>
+    typeof objectPermissions === 'function' ? objectPermissions : objectPermissions?.[action]
+
+  /**
+   * Fetches the object addressed by the URL, or raises 404 — then judges the
+   * caller against it.
+   *
+   * One choke point on purpose: retrieve, update, partial update and destroy
+   * all pass through here, so an object rule cannot be enforced on three of
+   * them and forgotten on the fourth.
+   */
+  async function getObject(context: Context, action: DetailAction): Promise<RowOf<M>> {
     const value = (context.params as Record<string, unknown>)[lookupField]
     const row = await withRelations(baseQueryset(context)).getOrNull({ [lookupField]: value } as never)
     if (!row) throw new NotFound(`No ${model.name} matching ${lookupField}=${String(value)}.`)
+
+    const check = objectPermissionFor(action)
+    if (check && !(await check(row, context))) {
+      // Same distinction the route layer makes: an anonymous caller might
+      // succeed after signing in, so telling them to is more useful than 403.
+      throw context.user ? new PermissionDenied() : new Unauthorized()
+    }
+
     return row
   }
 
@@ -308,7 +358,7 @@ export function modelViewSet<M extends AnyModel>(options: ModelViewSetOptions<M>
   if (enabled.has('retrieve')) {
     routes.get(
       `/:${lookupField}`,
-      async (context) => serializer.toRepresentation(await getObject(context)),
+      async (context) => serializer.toRepresentation(await getObject(context, 'retrieve')),
       {
         params: paramsSchema,
         response: serializer.read,
@@ -326,7 +376,7 @@ export function modelViewSet<M extends AnyModel>(options: ModelViewSetOptions<M>
    * before rendering.
    */
   const writeDetail = (partial: boolean) => async (context: Context) => {
-    const existing = await getObject(context)
+    const existing = await getObject(context, partial ? 'partialUpdate' : 'update')
     const pk = (existing as Record<string, unknown>)[model.pk]
     const data = await serializer.toInternal(context.body, { partial })
     const patched = (await hooks.beforeUpdate?.(data, existing, context)) ?? data
@@ -373,7 +423,7 @@ export function modelViewSet<M extends AnyModel>(options: ModelViewSetOptions<M>
     routes.delete(
       `/:${lookupField}`,
       async (context) => {
-        const existing = await getObject(context)
+        const existing = await getObject(context, 'destroy')
         await hooks.beforeDestroy?.(existing, context)
         await baseQueryset(context)
           .filter({ [model.pk]: (existing as Record<string, unknown>)[model.pk] } as never)

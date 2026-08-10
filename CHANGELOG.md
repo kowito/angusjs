@@ -5,6 +5,22 @@ contain breaking changes; those are listed first in each entry.
 
 ## Unreleased
 
+### Added — object-level permissions
+
+"Anyone signed in may read a post, but only its author may edit it" was not
+expressible. A `Permission` runs before anything is fetched, so it can only ask
+about the caller and the URL; a scoped `queryset` would hide other people's
+posts from readers as well as from editors.
+
+`objectPermissions` is checked against the row once it is loaded — one function
+for every detail action, or an object to vary it per action. Checks may be
+async, because object rules often depend on something the row does not carry.
+
+It hangs off the single point every detail action already passes through, so a
+rule cannot be enforced on three of them and forgotten on the fourth. A refused
+call is answered before any write, and an anonymous caller gets 401 rather than
+403, since signing in might actually help.
+
 ### Added — realtime application events
 
 Elysia already provides WebSockets, so this is the layer above one. What an

@@ -444,6 +444,27 @@ The protocol layer is dual-era: revision `2026-07-28` replaced sessions and the 
 
 ### Permissions
 
+Permissions run before anything is fetched, so they can only ask about the
+caller. `objectPermissions` asks about the row:
+
+```ts
+modelViewSet({
+  model: Post,
+  serializer: PostSerializer,
+  permissions: [isAuthenticated],
+  objectPermissions: {
+    update: (post, ctx) => post.authorId === ctx.user.id,
+    destroy: (post, ctx) => post.authorId === ctx.user.id,
+  },
+})
+```
+
+Anyone signed in may read a post; only its author may change it. Neither a
+permission nor a scoped `queryset` can say that alone — a queryset hiding other
+people's posts would hide them from readers too. When the *existence* of a row
+is itself confidential, scope the queryset instead: a 403 confirms the row is
+there, an out-of-scope queryset gives an honest 404.
+
 Permissions are functions over the request context, applied per route, per action, or across a whole router.
 
 ```ts
