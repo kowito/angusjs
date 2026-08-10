@@ -292,7 +292,11 @@ export const ${Model}Serializer = serializer(${Model}, {
 import { ${Model} } from './models.ts'
 import { ${Model}Serializer } from './serializers.ts'
 
-export default router().include(
+// Declared as a variable rather than exported inline so \`angus generate crud\`
+// can append further view sets to it.
+const routes = router()
+
+routes.include(
   '/${name}',
   modelViewSet({
     model: ${Model},
@@ -303,6 +307,8 @@ export default router().include(
     tags: [${JSON.stringify(name)}],
   }),
 )
+
+export default routes
 `,
   )
 

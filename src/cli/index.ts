@@ -12,7 +12,9 @@ import { resolveSettings } from '../core/settings.ts'
 import { check, models, openapi, routes, shell } from './commands/inspect.ts'
 import { client as clientCommand } from './commands/client.ts'
 import { mcp as mcpCommand } from './commands/mcp.ts'
+import { generate as generateCommand } from './commands/generate.ts'
 import { run as runCommand } from './commands/run.ts'
+import { seed as seedCommand } from './commands/seed.ts'
 import { worker as workerCommand } from './commands/worker.ts'
 import { makemigrations, migrate } from './commands/migrations.ts'
 import { startapp, startproject } from './commands/scaffold.ts'
@@ -39,6 +41,16 @@ const COMMANDS: Record<string, Command> = {
     summary: 'Create a new app inside the current project',
     usage: 'angus startapp <name>',
     run: ({ project, args }) => startapp(project!, args),
+  },
+  generate: {
+    summary: 'Scaffold a model, or a model with its API and admin',
+    usage: 'angus generate crud <app> <Name> [field:type ...]',
+    run: ({ project, args }) => generateCommand(project!, args),
+  },
+  seed: {
+    summary: "Run the project's seed script",
+    usage: 'angus seed [--init] [--no-transaction]',
+    run: ({ project, args }) => seedCommand(project!, args),
   },
   runserver: {
     summary: 'Start the development server',

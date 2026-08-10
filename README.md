@@ -80,6 +80,7 @@ bun add -d drizzle-kit
 angus startproject myapi
 cd myapi && bun install
 angus startapp blog       # models, serializers, urls, admin
+angus generate crud blog Comment body:text post:fk=Blog
 angus makemigrations      # models -> SQL
 angus migrate             # SQL -> database
 angus runserver           # API, /docs, /admin, /mcp
@@ -540,6 +541,8 @@ Both commands are configuration-only — no server, no database writes — so th
 | --- | --- |
 | `angus startproject <name>` | Scaffold a new project |
 | `angus startapp <name>` | Scaffold an app inside the project |
+| `angus generate crud <app> <Name>` | Scaffold a model with its API and admin |
+| `angus seed` | Run the project's seed script |
 | `angus runserver` | Development server |
 | `angus makemigrations` | Generate migrations from your models |
 | `angus migrate [--check\|--dry-run]` | Apply migrations; verify or preview them |

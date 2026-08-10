@@ -5,6 +5,24 @@ contain breaking changes; those are listed first in each entry.
 
 ## Unreleased
 
+### Added — generators and seeding
+
+`angus generate crud <app> <Name> [field:type ...]` scaffolds a model,
+serializer, view set and admin registration into an app that already exists —
+the second and third model being the common case, and copying the first by hand
+being where consistency starts to drift.
+
+Generated code is appended, never overwritten, and the generator manages imports
+and registers the model in the app's `models` map. Both matter: appending a
+reference without its import breaks the build at the moment the tool reports
+success, and a model missing from `models` gets no table, which only shows up at
+the first request.
+
+`angus seed` runs a project's `seed.ts` inside a transaction, so a seed that
+fails halfway leaves the database as it was. A script rather than a fixtures
+format, because "an author, then twenty posts belonging to them" is what seeding
+is usually for and a JSON fixture cannot say it.
+
 ### Added — ORM ergonomics
 
 Field mixins (`timestamps()`, `softDelete()`, `publicId()`) as plain objects
