@@ -9,7 +9,8 @@
 import { loadProject, type LoadedProject } from '../core/config.ts'
 import { runServer } from '../core/project.ts'
 import { resolveSettings } from '../core/settings.ts'
-import { check, models, routes, shell } from './commands/inspect.ts'
+import { check, models, openapi, routes, shell } from './commands/inspect.ts'
+import { mcp as mcpCommand } from './commands/mcp.ts'
 import { makemigrations, migrate } from './commands/migrations.ts'
 import { startapp, startproject } from './commands/scaffold.ts'
 import { bold, cyan, dim, fail, green, info } from './ui.ts'
@@ -57,6 +58,16 @@ const COMMANDS: Record<string, Command> = {
   models: {
     summary: 'Print every model and its columns',
     run: ({ project }) => models(project!),
+  },
+  openapi: {
+    summary: 'Print the OpenAPI document',
+    usage: 'angus openapi [--out openapi.json] [--compact]',
+    run: ({ project, args }) => openapi(project!, args),
+  },
+  mcp: {
+    summary: 'Serve the API to agents over MCP (stdio)',
+    usage: 'angus mcp [--list]',
+    run: ({ project, args }) => mcpCommand(project!, args),
   },
   check: {
     summary: 'Validate the project without starting it',

@@ -2,7 +2,7 @@
 
 A batteries-included API framework for [Bun](https://bun.sh) — Django's ergonomics on top of [ElysiaJS](https://elysiajs.com).
 
-Django's good ideas (pluggable apps, a real ORM, migrations, serializers, view sets, an auto-generated admin, a management CLI) without Django's magic. Everything is a plain function or object, everything is statically typed, and the schemas your models produce are the same schemas Elysia validates and documents with.
+Django's good ideas (pluggable apps, a real ORM, migrations, serializers, view sets, an auto-generated admin, a management CLI) without Django's magic, plus the two things a modern API needs: an OpenAPI document and an MCP server, both generated from the routes you already wrote. Everything is a plain function or object, everything is statically typed, and the schemas your models produce are the same schemas Elysia validates and documents with.
 
 ```ts
 // apps/blog/models.ts
@@ -37,7 +37,7 @@ export default router().include(
 )
 ```
 
-That's six REST endpoints, validated request and response bodies, filtering, search, ordering, pagination, and an OpenAPI document. Register the model with the admin and you also get a CRUD interface at `/admin`.
+That's six REST endpoints, validated request and response bodies, filtering, search, ordering, pagination, an OpenAPI 3.1 document at `/openapi.json`, and six MCP tools at `/mcp`. Register the model with the admin and you also get a CRUD interface at `/admin`.
 
 ---
 
@@ -188,6 +188,64 @@ Generates `GET /`, `POST /`, `GET /:id`, `PUT /:id`, `PATCH /:id`, `DELETE /:id`
 
 Query parameters on list endpoints: `?status=draft`, `?views__gte=10`, `?search=foo`, `?ordering=-createdAt`, `?page=2&pageSize=50`. Anything not in `filterFields`/`orderingFields` is ignored, so clients can't filter on columns you didn't expose.
 
+### OpenAPI
+
+The spec is generated from the router, not scraped from a running server — so `angus openapi` works without binding a port, and the document can never drift from the routes.
+
+```bash
+angus openapi                      # to stdout
+angus openapi --out openapi.json   # to a file
+```
+
+Served automatically at `/openapi.json`, with a self-contained reference page at `/docs`. No CDN script and no build step, so it works offline and under a strict CSP; point Scalar, Redoc or Swagger UI at `/openapi.json` if you want "try it out".
+
+Targets OpenAPI **3.1**, which uses JSON Schema 2020-12 natively — exactly what TypeBox emits, so schemas pass through untranslated. Serializer schemas become named components (`Post`, `PostInput`, `PostPatch`) and are `$ref`'d rather than inlined; give a second serializer for the same model a `name` so it lands as `AuthorSummary` rather than colliding.
+
+```ts
+openapi: {
+  title: 'My API',
+  version: '1.0.0',
+  path: '/docs',
+  specPath: '/openapi.json',
+  servers: [{ url: 'https://api.example.com' }],
+}
+```
+
+One subtlety worth knowing: Elysia's `t.Integer` is a *coercing* type that serialises to `anyOf: [string, integer]` so `"3"` from a query string is accepted. That is right for input and wrong for output — a client generated from it would type the field `string | number` — so response schemas are built with plain TypeBox and request schemas keep the coercion.
+
+### MCP
+
+The API is exposed to agents over the [Model Context Protocol](https://modelcontextprotocol.io), with one tool per route, generated from the same definitions that produce the OpenAPI document.
+
+```bash
+angus mcp --list   # inventory the tools
+angus mcp          # serve over stdio, for agent runners
+```
+
+Also served over Streamable HTTP at `/mcp` whenever the server runs. To register the stdio server with an agent runner:
+
+```json
+{ "mcpServers": { "myapi": { "command": "angus", "args": ["mcp"], "cwd": "/path/to/project" } } }
+```
+
+Each tool takes path and query parameters at the top level and the request body under `body` — nesting the body avoids a field silently colliding with a query parameter of the same name. Input schemas are closed (`additionalProperties: false`) so an invented argument fails loudly, and response schemas become `outputSchema`, so results come back as `structuredContent` and not just text.
+
+An API error (404, 422) is reported as a **tool** error with `isError: true` and the field-level messages, so the model can adapt. Only unknown tools and malformed requests are protocol errors.
+
+```ts
+mcp: {
+  path: '/mcp',
+  readOnly: true,                 // expose GET routes only
+  exclude: ['post-destroy'],      // or include: [...]
+  instructions: 'Prefer post-list before post-detail.',
+  permissions: [isStaff],         // gate the endpoint itself
+}
+```
+
+**Authority.** Tools are executed by dispatching a real request back through the same app, so validation, permissions, serialization and error mapping all apply — MCP is a second front door to the API, never a way around it. A protected endpoint stays protected: credentials on the MCP request are forwarded to the API call. Set `mcp: false` to remove the endpoint.
+
+**Protocol.** Dual-era, because the spec changed shape in revision `2026-07-28`: sessions, the GET stream and the `initialize` handshake were replaced by per-request `_meta` negotiation plus a mandatory `server/discover`. angusjs answers both, advertising `2026-07-28`, `2025-11-25`, `2025-06-18` and `2025-03-26`, and picks the era from how the caller opens. As the transport requires, `Origin` is validated (DNS rebinding), header and body must agree about the protocol version and method, and GET/DELETE return 405.
+
 ### Admin
 
 An auto-generated CRUD interface, derived from the same field specs the ORM and serializers use. Register a model and you get a listing with search, filters, sorting and pagination, plus add/change/delete forms.
@@ -249,6 +307,8 @@ export default defineSettings({
 | `angus migrate` | Apply pending migrations |
 | `angus routes` | Print the URL table |
 | `angus models` | Print every model and its columns |
+| `angus openapi [--out]` | Print or write the OpenAPI document |
+| `angus mcp [--list]` | Serve the API to agents over MCP (stdio) |
 | `angus check` | Validate the project without starting it |
 | `angus shell` | REPL with your models in scope |
 

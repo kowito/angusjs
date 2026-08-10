@@ -12,7 +12,7 @@ export type { AngusApp, AppConfig } from './core/app.ts'
 export { defineSettings, resolveSettings } from './core/settings.ts'
 export type { OpenApiSettings, ResolvedSettings, ServerSettings, Settings } from './core/settings.ts'
 
-export { createApp, projectRouter, runServer } from './core/project.ts'
+export { createApp, mcpIdentity, projectRouter, projectSpec, projectTools, runServer } from './core/project.ts'
 export type { BuildOptions, RunningServer } from './core/project.ts'
 
 export { findConfig, loadProject } from './core/config.ts'
@@ -79,6 +79,14 @@ export type {
 // Admin
 export { AdminSite, adminSite } from './admin/index.ts'
 export type { AdminSiteOptions, ModelAdminOptions } from './admin/index.ts'
+
+// OpenAPI
+export { generateOpenApi, renderDocs } from './openapi/index.ts'
+export type { OpenApiDocument, OpenApiOptions } from './openapi/index.ts'
+
+// MCP
+export { buildTools, callTool, dispatch, serveStdio, SUPPORTED_VERSIONS } from './mcp/index.ts'
+export type { DispatchContext, ServerIdentity, Tool, ToolDefinition } from './mcp/index.ts'
 
 // HTTP
 export {

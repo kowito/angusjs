@@ -8,7 +8,7 @@
 
 import type { Elysia } from 'elysia'
 import type { DatabaseConfig } from '../db/connection.ts'
-import type { Context } from '../routing/router.ts'
+import type { Context, Permission } from '../routing/router.ts'
 import type { AngusApp } from './app.ts'
 
 export interface ServerSettings {
@@ -21,8 +21,32 @@ export interface OpenApiSettings {
   title?: string
   version?: string
   description?: string
-  /** Where the docs are served. Defaults to `/docs`. */
+  /** Where the reference page is served. Defaults to `/docs`. */
   path?: string
+  /** Where the JSON document is served. Defaults to `/openapi.json`. */
+  specPath?: string
+  /** Advertised base URLs, for clients generated from the spec. */
+  servers?: { url: string; description?: string }[]
+}
+
+export interface McpSettings {
+  enabled?: boolean
+  /** Where the MCP endpoint is served. Defaults to `/mcp`. */
+  path?: string
+  /** Server name reported to clients. Defaults to the OpenAPI title. */
+  name?: string
+  version?: string
+  /** Guidance handed to the model alongside the tool list. */
+  instructions?: string
+  /** Only expose these tools, by name (the route's `name`, or a derived one). */
+  include?: readonly string[]
+  exclude?: readonly string[]
+  /** Expose only GET/HEAD routes — an agent that can read but not write. */
+  readOnly?: boolean
+  /** Origins allowed to call the endpoint, in addition to the server's own. */
+  allowedOrigins?: readonly string[]
+  /** Gate the endpoint itself, on top of each route's own permissions. */
+  permissions?: Permission[]
 }
 
 export interface Settings {
@@ -40,6 +64,13 @@ export interface Settings {
    */
   authenticate?: (context: Context) => unknown | Promise<unknown>
   openapi?: OpenApiSettings | false
+  /**
+   * Exposes the API to agents over the Model Context Protocol. Enabled by
+   * default: the generated tools dispatch through the same routes, so they
+   * carry exactly the authority the HTTP API already grants and no more. Set
+   * `false` to remove the endpoint.
+   */
+  mcp?: McpSettings | false
   /** Includes stack traces in 500 responses. Defaults to `NODE_ENV !== 'production'`. */
   debug?: boolean
   /** Where migration SQL lives, relative to the project root. Defaults to `migrations`. */

@@ -201,14 +201,18 @@ export class AdminSite {
     const routes = new Router()
     routes.permissions(this.guard())
 
-    routes.get('/', (context) => this.index(context))
-    routes.get('/:model', (context) => this.changelist(context))
-    routes.get('/:model/add', (context) => this.addForm(context))
-    routes.post('/:model/add', (context) => this.create(context))
-    routes.get('/:model/:pk', (context) => this.changeForm(context))
-    routes.post('/:model/:pk', (context) => this.update(context))
-    routes.get('/:model/:pk/delete', (context) => this.confirmDelete(context))
-    routes.post('/:model/:pk/delete', (context) => this.destroy(context))
+    // These serve HTML for humans, so they are kept out of the OpenAPI
+    // document and out of the MCP tool list.
+    const hidden = { hidden: true }
+
+    routes.get('/', (context) => this.index(context), hidden)
+    routes.get('/:model', (context) => this.changelist(context), hidden)
+    routes.get('/:model/add', (context) => this.addForm(context), hidden)
+    routes.post('/:model/add', (context) => this.create(context), hidden)
+    routes.get('/:model/:pk', (context) => this.changeForm(context), hidden)
+    routes.post('/:model/:pk', (context) => this.update(context), hidden)
+    routes.get('/:model/:pk/delete', (context) => this.confirmDelete(context), hidden)
+    routes.post('/:model/:pk/delete', (context) => this.destroy(context), hidden)
 
     return routes
   }

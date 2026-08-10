@@ -5,9 +5,10 @@
  * data structure before it is a server.
  */
 
+import { resolve } from 'node:path'
 import { appModels } from '../../core/app.ts'
 import type { LoadedProject } from '../../core/config.ts'
-import { projectRouter } from '../../core/project.ts'
+import { projectRouter, projectSpec } from '../../core/project.ts'
 import { resolveSettings } from '../../core/settings.ts'
 import { connect } from '../../db/connection.ts'
 import type { FieldMap } from '../../db/model.ts'
@@ -46,6 +47,29 @@ export async function routes(project: LoadedProject): Promise<number> {
   table(rows, { head: ['METHOD', 'PATH', 'NAME', 'ACCESS'] })
   info('')
   info(dim(`${flattened.length} route${flattened.length === 1 ? '' : 's'} across ${settings.apps.length} app(s)`))
+  return 0
+}
+
+/**
+ * Writes the OpenAPI document to stdout, or to a file with `--out`.
+ * Nothing else is printed to stdout so `angus openapi > api.json` works.
+ */
+export async function openapi(project: LoadedProject, args: string[]): Promise<number> {
+  const spec = projectSpec(project.settings)
+  const json = args.includes('--compact') ? JSON.stringify(spec) : JSON.stringify(spec, null, 2)
+
+  const outIndex = args.indexOf('--out')
+  if (outIndex === -1) {
+    console.log(json)
+    return 0
+  }
+
+  const target = args[outIndex + 1]
+  if (!target) throw new Error('`--out` needs a file path.')
+  await Bun.write(resolve(project.root, target), `${json}\n`)
+
+  const operations = Object.values(spec.paths).reduce((total, methods) => total + Object.keys(methods).length, 0)
+  success(`Wrote ${operations} operation(s) to ${target}`)
   return 0
 }
 

@@ -61,7 +61,6 @@ export async function startproject(args: string[]): Promise<number> {
           elysia: '^1.4.29',
         },
         devDependencies: {
-          '@elysiajs/openapi': '^1.4.15',
           '@types/bun': 'latest',
           'drizzle-kit': '^0.31.10',
           typescript: '^5.9.2',
@@ -135,10 +134,16 @@ export default defineSettings({
     port: 8000,
   },
 
+  // Spec at /openapi.json, reference page at /docs.
   openapi: {
     title: ${JSON.stringify(name)},
     version: '0.1.0',
   },
+
+  // The API is also exposed to agents over MCP at /mcp, with one tool per
+  // route. Tool calls go through the same routes, so they carry exactly the
+  // permissions the HTTP API already grants. Use \`mcp: false\` to remove the
+  // endpoint, or \`mcp: { readOnly: true }\` to expose reads only.
 })
 `,
   )

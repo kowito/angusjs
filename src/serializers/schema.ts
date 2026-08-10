@@ -8,7 +8,7 @@
  */
 
 import { t } from 'elysia'
-import type { TSchema } from '@sinclair/typebox'
+import { Type, type TSchema } from '@sinclair/typebox'
 import type { FieldSpec } from '../db/fields.ts'
 
 export type SchemaMode = 'read' | 'write'
@@ -37,7 +37,7 @@ function baseSchema(spec: FieldSpec, mode: SchemaMode): TSchema {
 
   switch (spec.kind) {
     case 'foreignKey':
-      if (mode === 'read') return t.Integer(notes)
+      if (mode === 'read') return Type.Integer(notes)
       // Accepts a bare id or an object carrying one, mirroring what the ORM
       // takes. That also lets a client PATCH back a response body whose
       // relation was serialised as a nested object.
@@ -51,15 +51,18 @@ function baseSchema(spec: FieldSpec, mode: SchemaMode): TSchema {
     case 'integer':
     case 'smallInteger':
     case 'bigInteger':
-      // t.Integer on the way out, t.Numeric on the way in so `"3"` from a form
-      // or query string coerces rather than 422s.
+      // Reads use plain TypeBox: Elysia's `t.Integer` is a *coercing* type that
+      // serialises to `anyOf: [string, integer]`, which is right for input but
+      // would make a client generated from the spec type the field
+      // `string | number`. Writes keep the coercion so `"3"` from a form or
+      // query string is accepted rather than rejected.
       return mode === 'read'
-        ? t.Integer({ ...notes, minimum: spec.min, maximum: spec.max })
+        ? Type.Integer({ ...notes, minimum: spec.min, maximum: spec.max })
         : t.Numeric({ ...notes, minimum: spec.min, maximum: spec.max })
 
     case 'float':
       return mode === 'read'
-        ? t.Number({ ...notes, minimum: spec.min, maximum: spec.max })
+        ? Type.Number({ ...notes, minimum: spec.min, maximum: spec.max })
         : t.Numeric({ ...notes, minimum: spec.min, maximum: spec.max })
 
     case 'boolean':

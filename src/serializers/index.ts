@@ -71,6 +71,12 @@ export interface ComputedField<Row, Schema extends TSchema> {
 }
 
 export interface SerializerOptions<M extends AnyModel, K extends keyof M['fields'], Extra> {
+  /**
+   * Schema name, used for the OpenAPI component. Defaults to the model name in
+   * PascalCase. Set it when a model has more than one serializer, so the
+   * document gets `Author` and `AuthorSummary` rather than `Author` twice.
+   */
+  name?: string
   /** Which model fields to include. Defaults to all of them. */
   fields?: readonly K[]
   /** Fields to leave out. Applied after `fields`. */
@@ -220,9 +226,13 @@ export function serializer<
   const writeProperties: Record<string, TSchema> = {}
   for (const attr of writeFields) writeProperties[attr] = fieldSchema(model.fields[attr]!.spec, 'write')
 
-  const read = t.Object(readProperties, { title: model.name })
-  const write = t.Object(writeProperties, { title: `${model.name}Input` })
-  const patch = t.Partial(write, { title: `${model.name}Patch` })
+  // PascalCase, because these names become OpenAPI component names and, from
+  // there, the type names in whatever client is generated from the document.
+  const schemaName = options.name ?? model.name.replace(/(^|[_-])([a-z])/g, (_, __, char: string) => char.toUpperCase())
+
+  const read = t.Object(readProperties, { title: schemaName })
+  const write = t.Object(writeProperties, { title: `${schemaName}Input` })
+  const patch = t.Partial(write, { title: `${schemaName}Patch` })
 
   const dateKinds = new Set(['date', 'datetime'])
 

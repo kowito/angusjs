@@ -26,8 +26,23 @@ curl 'localhost:8000/api/posts?status=published&ordering=-views&pageSize=5'
 curl localhost:8000/api/posts/by-slug/on-compilers   # increments the view counter
 curl localhost:8000/api/stats
 
-open localhost:8000/docs      # OpenAPI
+open localhost:8000/docs      # API reference
+curl localhost:8000/openapi.json
 open localhost:8000/admin     # the admin interface
+```
+
+The same routes are exposed to agents over MCP:
+
+```bash
+bun ../../src/cli/index.ts mcp --list        # 17 tools
+
+# Streamable HTTP, while the server runs
+curl -X POST localhost:8000/mcp -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+
+# or over stdio, the way an agent runner launches it
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"blog-stats","arguments":{}}}' \
+  | bun ../../src/cli/index.ts mcp
 ```
 
 Worth reading in order:

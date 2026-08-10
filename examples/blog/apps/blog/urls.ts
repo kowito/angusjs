@@ -11,14 +11,18 @@ const postBySlug = view({
   params: t.Object({ slug: t.String() }),
   response: PostSerializer.read,
   summary: 'Retrieve a post by its slug',
+  name: 'post-by-slug',
   tags: ['posts'],
   async handler({ params }) {
-    const post = await Post.objects.getOrNull({ slug: params.slug })
-    if (!post) throw new NotFound(`No post with slug "${params.slug}".`)
+    const existing = await Post.objects.getOrNull({ slug: params.slug })
+    if (!existing) throw new NotFound(`No post with slug "${params.slug}".`)
 
-    // Count the read. `update()` returns the rows it touched.
-    const [updated] = await Post.objects.filter({ id: post.id }).update({ views: post.views + 1 })
-    return PostSerializer.toRepresentation(updated ?? post)
+    // Count the read, then re-read with the author joined — PostSerializer
+    // embeds it, and `update()` returns bare rows.
+    await Post.objects.filter({ id: existing.id }).update({ views: existing.views + 1 })
+    const post = await Post.objects.selectRelated('author').get({ id: existing.id })
+
+    return PostSerializer.toRepresentation(post)
   },
 })
 
@@ -30,6 +34,7 @@ const stats = view({
     totalViews: t.Union([t.Number(), t.Null()]),
   }),
   summary: 'Blog-wide counters',
+  name: 'blog-stats',
   tags: ['meta'],
   async handler() {
     const [authors, posts, published, views] = await Promise.all([

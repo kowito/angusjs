@@ -12,8 +12,8 @@ export const AuthorSerializer = serializer(Author, {
   },
 })
 
-/** The author as a bare id — used where the nested object would be noise. */
-const AuthorSummarySerializer = serializer(Author, { fields: ['id', 'name'] })
+/** A trimmed author, embedded in post responses. */
+const AuthorSummarySerializer = serializer(Author, { name: 'AuthorSummary', fields: ['id', 'name'] })
 
 export const PostSerializer = serializer(Post, {
   readOnly: ['id', 'views', 'createdAt', 'updatedAt'],
