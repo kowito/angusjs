@@ -1,298 +1,285 @@
-# angusjs
+# Angus
 
-A batteries-included API framework for [Bun](https://bun.sh) — Django's ergonomics on top of [ElysiaJS](https://elysiajs.com).
+**The application framework for [Elysia](https://elysiajs.com).**
 
-Django's good ideas (pluggable apps, a real ORM, migrations, serializers, view sets, an auto-generated admin, a management CLI) without Django's magic, plus the two things a modern API needs: an OpenAPI document and an MCP server, both generated from the routes you already wrote. Everything is a plain function or object, everything is statically typed, and the schemas your models produce are the same schemas Elysia validates and documents with.
+Angus builds production applications on top of Elysia and [Bun](https://bun.sh).
+
+Define your domain model once. Angus derives the database schema, migrations, TypeScript types, validation, REST API, OpenAPI document, admin interface, and MCP tools from the same source of truth.
 
 ```ts
-// apps/blog/models.ts
-import { defineModel, f } from 'angusjs/db'
-
-export const Post = defineModel('post', {
+export const Product = defineModel('product', {
   fields: {
-    title: f.char({ maxLength: 200 }),
-    slug: f.slug({ unique: true }),
-    body: f.text({ blank: true, default: '' }),
-    status: f.char({ choices: ['draft', 'published'], default: 'draft' }),
-    author: f.foreignKey(() => Author),
-    createdAt: f.datetime({ autoNowAdd: true }),
+    name: f.char({ maxLength: 200 }),
+    price: f.decimal({ precision: 10, scale: 2 }),
+    status: f.char({ choices: ['draft', 'active', 'archived'], default: 'draft' }),
+    supplier: f.foreignKey(() => Supplier),
   },
   meta: { ordering: ['-createdAt'] },
 })
 ```
 
-```ts
-// apps/blog/urls.ts
-import { modelViewSet, router } from 'angusjs/routing'
+One declaration, many surfaces:
 
-export default router().include(
-  '/posts',
-  modelViewSet({
-    model: Post,
-    serializer: PostSerializer,
-    filterFields: ['status', 'author'],
-    searchFields: ['title', 'body'],
-    orderingFields: ['createdAt', 'title'],
-  }),
-)
+```text
+                        defineModel()
+                              │
+        ┌──────────┬──────────┼──────────┬──────────┐
+        │          │          │          │          │
+     Database  TypeScript  Validation  Admin UI  MCP tools
+     schema      types      schemas       │          │
+        │          │          │          │          │
+    Migrations  Row/insert  Elysia    Forms &    Agent
+                  types      routes    filters    access
+                              │
+                          OpenAPI
 ```
-
-That's six REST endpoints, validated request and response bodies, filtering, search, ordering, pagination, an OpenAPI 3.1 document at `/openapi.json`, and six MCP tools at `/mcp`. Register the model with the admin and you also get a CRUD interface at `/admin`.
 
 ---
 
-## Install
+## Why Angus
+
+Elysia gives you an exceptionally fast, type-safe foundation for TypeScript APIs.
+
+Angus sits one layer above and supplies the application conventions most production systems eventually need: models, CRUD endpoints, serialization, permissions, an admin interface, and agent access.
+
+```text
+┌──────────────────────────────────────────────┐
+│                  Your App                    │
+├──────────────────────────────────────────────┤
+│                    Angus                     │
+│                                              │
+│  Models · QuerySets · Serializers · ViewSets │
+│  Permissions · Admin · OpenAPI · MCP · CLI   │
+├──────────────────────────────────────────────┤
+│                   Elysia                     │
+│                                              │
+│  Routing · Validation · Plugins · Lifecycle  │
+│  HTTP · WebSockets                           │
+├──────────────────────────────────────────────┤
+│                     Bun                      │
+└──────────────────────────────────────────────┘
+```
+
+Angus does not replace Elysia. **Angus extends Elysia.**
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for where the boundary sits and why.
+
+---
+
+## Quick start
 
 Requires Bun 1.2+. There is no Node build — the ORM uses `bun:sqlite` and `Bun.SQL`.
 
 ```bash
 bun add angusjs drizzle-orm elysia
-bun add -d drizzle-kit @elysiajs/openapi
+bun add -d drizzle-kit
 ```
-
-## Getting started
 
 ```bash
 angus startproject myapi
 cd myapi && bun install
-angus startapp blog          # scaffolds models, serializers, urls, app
-# register the app in angus.config.ts
-angus makemigrations         # models -> SQL
-angus migrate                # SQL -> database
-angus runserver              # http://localhost:8000, docs at /docs
+angus startapp blog       # models, serializers, urls, admin
+angus makemigrations      # models -> SQL
+angus migrate             # SQL -> database
+angus runserver           # API, /docs, /admin, /mcp
 ```
 
 A complete worked example lives in [`examples/blog`](examples/blog).
 
 ---
 
-## The pieces
+## Elysia-native
 
-### Models
-
-`defineModel` is a function, not a class, because that's what lets the row type be *inferred* rather than declared twice.
+Angus composes with Elysia rather than abstracting it away. A router is a plain data structure that compiles to an Elysia instance, so you can adopt one piece without adopting the framework.
 
 ```ts
-const Post = defineModel('post', {
-  fields: { title: f.char({ maxLength: 200 }), views: f.integer({ default: 0 }) },
-  meta: { ordering: ['-createdAt'], indexes: [{ fields: ['status', 'createdAt'] }] },
-})
+import { Elysia } from 'elysia'
+import { modelViewSet } from 'angusjs/routing'
 
-type PostRow = typeof Post.$row // { id: number; title: string; views: number }
+const app = new Elysia()
+  .get('/health', () => ({ status: 'ok' }))          // your ordinary routes
+  .onRequest(({ request }) => log(request))          // your ordinary hooks
+  .use(modelViewSet({ model: Product, serializer: ProductSerializer })
+    .toElysia({ prefix: '/products' }))              // six endpoints from Angus
+  .listen(3000)
 ```
 
-- An `id` primary key is added when you don't declare one.
-- Table names are pluralised snake_case (`post` → `posts`); column names are snake_case.
-- Foreign keys store `<attr>_id` and are indexed automatically.
-- Nullable fields widen the row type to `| null`; fields with defaults become optional on insert.
+Lifecycle hooks, guards, decorators and plugins apply to Angus routes exactly as they do to your own, because they are the same Elysia instance. The ORM has no HTTP dependency at all, so it works just as well in a worker or a script.
 
-Field types: `char` `text` `email` `slug` `url` `uuid` `integer` `smallInteger` `bigInteger` `float` `decimal` `boolean` `date` `datetime` `time` `json` `foreignKey` `oneToOne` `auto` `bigAuto`.
+**Your existing Elysia application does not need to become an Angus application.** Add Angus where you want higher-level primitives; use `createApp(settings)` when you want the whole convention.
 
-### QuerySets
+---
 
-Lazy, immutable, and chainable. Nothing runs until you await it.
+## One model, many surfaces
+
+| Layer | Derived from the model | Status |
+| --- | --- | --- |
+| Database | Column types, constraints, indexes | ✅ |
+| Migrations | Drizzle schema and SQL | ✅ |
+| TypeScript | Row, insert and update types | ✅ |
+| Validation | TypeBox schemas | ✅ |
+| REST | Elysia CRUD routes | ✅ |
+| OpenAPI | Named component schemas | ✅ |
+| Admin | Tables, filters, forms, widgets | ✅ |
+| MCP | Tool input and output schemas | ✅ |
+| Typed client | End-to-end typed fetch client | Planned |
+
+Input and output contracts stay separate, so input coercion never leaks into your public API types. (Elysia's `t.Integer` accepts `"3"` from a query string and serialises as `anyOf: [string, integer]` — correct for a request, wrong for a response, where it would make a generated client type the field `string | number`. Angus builds response schemas from plain TypeBox and keeps coercion on the way in.)
+
+---
+
+## The pieces
+
+### Models and QuerySets
+
+`defineModel` is a function rather than a class, because that is what lets the row type be *inferred* instead of declared twice.
 
 ```ts
-await Post.objects.filter({ status: 'published', views__gte: 100 })
-  .exclude({ title__icontains: 'draft' })
+type ProductRow = typeof Product.$row   // { id: number; name: string; ... }
+
+await Product.objects.filter({ status: 'active', price__gte: '10.00' })
+  .exclude({ name__icontains: 'sample' })
   .orderBy('-createdAt')
   .limit(10)
 
-await Post.objects.get({ slug: 'hello' })       // throws DoesNotExist
-await Post.objects.getOrNull({ slug: 'hello' }) // returns null
-await Post.objects.filter({ author__name: 'Grace' })   // traverses the relation
-await Post.objects.selectRelated('author')             // joins, `post.author.name`
-await Post.objects.aggregate({ total: 'sum:views' })
-const [post, created] = await Post.objects.getOrCreate({ slug: 'x' }, { title: 'X' })
+await Product.objects.get({ id: 3 })              // throws DoesNotExist
+await Product.objects.filter({ supplier__country: 'GB' })   // traverses the relation
+await Product.objects.selectRelated('supplier')   // joins; product.supplier.name
 ```
 
-Lookups are typed. `views__gte` only accepts a number, `title__in` only a `string[]`, and a misspelled field is a compile error:
+Lookups are typed: `price__gte` only accepts the field's type, `name__in` only an array, and a misspelled field is a compile error.
 
-```
+```text
 exact  iexact  ne  in  notIn  isnull  contains  icontains  startswith
 istartswith  endswith  iendswith  gt  gte  lt  lte  range
 ```
 
-`Q` builds anything that isn't a plain AND:
-
-```ts
-import { Q } from 'angusjs/db'
-await Post.objects.filter(Q.or({ status: 'published' }, { author: user.id }))
-```
-
-`values()` narrows the awaited type, not just the SQL:
-
-```ts
-const rows = await Post.objects.values('id', 'title') // { id: number; title: string }[]
-```
+An `id` primary key is added when you don't declare one; table names are pluralised snake_case; foreign keys store `<attr>_id` and are indexed automatically.
 
 ### Serializers
 
 A serializer decides what crosses the wire and produces a real TypeBox schema, so Elysia validates and documents it.
 
 ```ts
-const PostSerializer = serializer(Post, {
-  exclude: ['internalNotes'],
-  readOnly: ['id', 'views', 'createdAt'],
-  nested: { author: AuthorSerializer },     // embed the relation in responses
+const ProductSerializer = serializer(Product, {
+  readOnly: ['id', 'createdAt'],
+  nested: { supplier: SupplierSerializer },   // embed the relation in responses
   computed: {
-    excerpt: { schema: t.String(), get: (post) => post.body.slice(0, 140) },
+    inStock: { schema: t.Boolean(), get: (p) => p.quantity > 0 },
   },
 })
 ```
 
-- Responses expose relations as `authorId`, plus a nested `author` object when configured.
-- Requests take `author: <id>` — or the whole object, so a response body can be `PATCH`ed straight back.
-- `readOnly` fields are ignored on input rather than rejected.
-- Dates go out as ISO strings and come in as coerced `Date`s.
-
-### Views
-
-```ts
-const postBySlug = view({
-  params: t.Object({ slug: t.String() }),
-  response: PostSerializer.read,
-  permissions: [isAuthenticated],
-  async handler({ params }) {
-    const post = await Post.objects.getOrNull({ slug: params.slug })
-    if (!post) throw new NotFound()
-    return PostSerializer.toRepresentation(post)
-  },
-})
-
-router().get('/posts/by-slug/:slug', postBySlug)
-```
-
-Throwing is the error-handling story: `NotFound`, `BadRequest`, `PermissionDenied`, `Conflict`, `Throttled`, or any `APIError`. `DoesNotExist` from the ORM becomes a 404 on its own.
-
-### View sets
+### Views and view sets
 
 ```ts
 modelViewSet({
-  model: Post,
-  serializer: PostSerializer,
-  queryset: (ctx) => Post.objects.filter({ author: ctx.user.id }), // scopes every action
-  actions: ['list', 'retrieve', 'create'],          // omit the rest
+  model: Product,
+  serializer: ProductSerializer,
+  queryset: (ctx) => Product.objects.filter({ owner: ctx.user.id }),  // scopes every action
   actionPermissions: { create: [isAuthenticated] },
   filterFields: ['status'],
-  searchFields: ['title', 'body'],
-  orderingFields: ['createdAt'],
-  pagination: pageNumberPagination({ pageSize: 50 }),
-  hooks: {
-    beforeCreate: (data, ctx) => ({ ...data, author: ctx.user.id }),
+  searchFields: ['name'],
+  orderingFields: ['createdAt', 'price'],
+})
+```
+
+Generates `GET /`, `POST /`, `GET /:id`, `PUT /:id`, `PATCH /:id`, `DELETE /:id`, with filtering, search, ordering and pagination. The `queryset` option scopes reads *and* writes, so a row outside it 404s rather than leaking.
+
+For anything a view set doesn't cover, `view()` bundles a handler with its schema and permissions:
+
+```ts
+const publish = view({
+  params: t.Object({ id: t.Numeric() }),
+  response: ProductSerializer.read,
+  permissions: [isStaff],
+  async handler({ params }) {
+    const [row] = await Product.objects.filter({ id: params.id }).update({ status: 'active' })
+    if (!row) throw new NotFound()
+    return ProductSerializer.toRepresentation(row)
   },
 })
 ```
 
-Generates `GET /`, `POST /`, `GET /:id`, `PUT /:id`, `PATCH /:id`, `DELETE /:id`. The `queryset` option scopes retrieval *and* writes, so a row outside it 404s rather than leaking.
+### Admin
 
-Query parameters on list endpoints: `?status=draft`, `?views__gte=10`, `?search=foo`, `?ordering=-createdAt`, `?page=2&pageSize=50`. Anything not in `filterFields`/`orderingFields` is ignored, so clients can't filter on columns you didn't expose.
+Register a model and get a working CRUD interface at `/admin` — tables, search, filters, sorting, pagination, and add/change/delete forms, all derived from the same field specs.
+
+```ts
+admin.register(Product, {
+  listDisplay: ['name', 'status', 'price', 'supplier'],
+  listFilter: ['status', 'supplier'],
+  searchFields: ['name'],
+  readonlyFields: ['createdAt'],
+})
+```
+
+Widgets come from the field kind: choices become a `<select>`, booleans a checkbox, relations a dropdown showing the target's name. Server-rendered HTML, no build step.
+
+It fails closed. With `permissions` configured they gate every page; with none it serves in development and returns 403 in production — convenient on day one, never an open admin by accident. Writes reject cross-site submissions via `Origin` and `Sec-Fetch-Site`.
 
 ### OpenAPI
 
-The spec is generated from the router, not scraped from a running server — so `angus openapi` works without binding a port, and the document can never drift from the routes.
+Generated from the router, not scraped from a running server, so it can never drift from the routes.
 
 ```bash
-angus openapi                      # to stdout
-angus openapi --out openapi.json   # to a file
+angus openapi --out openapi.json
 ```
 
-Served automatically at `/openapi.json`, with a self-contained reference page at `/docs`. No CDN script and no build step, so it works offline and under a strict CSP; point Scalar, Redoc or Swagger UI at `/openapi.json` if you want "try it out".
+Served at `/openapi.json` with a self-contained reference page at `/docs` — no CDN script, so it works offline and under a strict CSP. Targets OpenAPI 3.1, which uses JSON Schema 2020-12 natively, exactly what TypeBox emits. Serializer schemas become named components (`Product`, `ProductInput`, `ProductPatch`) and are `$ref`'d rather than inlined.
 
-Targets OpenAPI **3.1**, which uses JSON Schema 2020-12 natively — exactly what TypeBox emits, so schemas pass through untranslated. Serializer schemas become named components (`Post`, `PostInput`, `PostPatch`) and are `$ref`'d rather than inlined; give a second serializer for the same model a `name` so it lands as `AuthorSummary` rather than colliding.
+### AI-native
 
-```ts
-openapi: {
-  title: 'My API',
-  version: '1.0.0',
-  path: '/docs',
-  specPath: '/openapi.json',
-  servers: [{ url: 'https://api.example.com' }],
-}
+Angus treats an agent as another client of the same application.
+
+```text
+                    Application
+                         │
+              ┌──────────┴──────────┐
+           REST API                MCP
+              │                     │
+            Human                 Agent
+              └──────────┬──────────┘
+                         │
+                  Same validation
+                  Same permissions
+                  Same business logic
 ```
 
-One subtlety worth knowing: Elysia's `t.Integer` is a *coercing* type that serialises to `anyOf: [string, integer]` so `"3"` from a query string is accepted. That is right for input and wrong for output — a client generated from it would type the field `string | number` — so response schemas are built with plain TypeBox and request schemas keep the coercion.
-
-### MCP
-
-The API is exposed to agents over the [Model Context Protocol](https://modelcontextprotocol.io), with one tool per route, generated from the same definitions that produce the OpenAPI document.
-
-```bash
-angus mcp --list   # inventory the tools
-angus mcp          # serve over stdio, for agent runners
-```
-
-Also served over Streamable HTTP at `/mcp` whenever the server runs. To register the stdio server with an agent runner:
-
-```json
-{ "mcpServers": { "myapi": { "command": "angus", "args": ["mcp"], "cwd": "/path/to/project" } } }
-```
-
-Each tool takes path and query parameters at the top level and the request body under `body` — nesting the body avoids a field silently colliding with a query parameter of the same name. Input schemas are closed (`additionalProperties: false`) so an invented argument fails loudly, and response schemas become `outputSchema`, so results come back as `structuredContent` and not just text.
-
-An API error (404, 422) is reported as a **tool** error with `isError: true` and the field-level messages, so the model can adapt. Only unknown tools and malformed requests are protocol errors.
+One tool per route, served over Streamable HTTP at `/mcp` and over stdio via `angus mcp`. Tools execute by dispatching a real request back through the app, so validation, permissions, serialization and error mapping all apply — **MCP is a second front door, never a way around the application's security model.** A permission-gated route stays gated.
 
 ```ts
 mcp: {
-  path: '/mcp',
-  readOnly: true,                 // expose GET routes only
-  exclude: ['post-destroy'],      // or include: [...]
-  instructions: 'Prefer post-list before post-detail.',
-  permissions: [isStaff],         // gate the endpoint itself
+  readOnly: true,             // expose GET routes only
+  exclude: ['product-destroy'],
+  permissions: [isStaff],     // gate the endpoint itself
 }
 ```
 
-**Authority.** Tools are executed by dispatching a real request back through the same app, so validation, permissions, serialization and error mapping all apply — MCP is a second front door to the API, never a way around it. A protected endpoint stays protected: credentials on the MCP request are forwarded to the API call. Set `mcp: false` to remove the endpoint.
+The protocol layer is dual-era: revision `2026-07-28` replaced sessions and the `initialize` handshake with per-request negotiation plus `server/discover`, and most clients still speak the handshake, so Angus answers both.
 
-**Protocol.** Dual-era, because the spec changed shape in revision `2026-07-28`: sessions, the GET stream and the `initialize` handshake were replaced by per-request `_meta` negotiation plus a mandatory `server/discover`. angusjs answers both, advertising `2026-07-28`, `2025-11-25`, `2025-06-18` and `2025-03-26`, and picks the era from how the caller opens. As the transport requires, `Origin` is validated (DNS rebinding), header and body must agree about the protocol version and method, and GET/DELETE return 405.
+### Permissions
 
-### Admin
-
-An auto-generated CRUD interface, derived from the same field specs the ORM and serializers use. Register a model and you get a listing with search, filters, sorting and pagination, plus add/change/delete forms.
+Permissions are functions over the request context, applied per route, per action, or across a whole router.
 
 ```ts
-// admin.ts — the project's site
-import { adminSite } from 'angusjs/admin'
-export default adminSite({ title: 'My admin', permissions: [isStaff] })
+const isOwner: Permission = (ctx) => ctx.user?.id === ctx.params.userId
 
-// apps/blog/admin.ts — each app registers its own models
-import admin from '../../admin.ts'
-
-admin.register(Post, {
-  listDisplay: ['title', 'status', 'author', 'views', 'createdAt'],
-  listFilter: ['status', 'author'],
-  searchFields: ['title', 'body'],
-  readonlyFields: ['views'],
-  listPerPage: 25,
-})
+router()
+  .permissions(isAuthenticated)                 // whole router
+  .get('/me', profile)
+  .delete('/me', deleteAccount, { permissions: [isOwner] })
 ```
 
-`apps/blog/app.ts` imports `./admin.ts` for its side effect, so installing the app registers its admin — the same shape as Django's `admin.py`. Add `admin.app()` to `settings.apps` and it mounts at `/admin`, outside the project's API prefix.
-
-Widgets come from the field kind: choices become a `<select>`, booleans a checkbox, relations a dropdown of the target's rows, `text` a textarea, `datetime` a datetime picker. Foreign keys display the target's `name`/`title`/`slug` rather than a bare id.
-
-Options: `listDisplay` `listFilter` `searchFields` `ordering` `readonlyFields` `fields` `exclude` `listPerPage` `group` `displayField` `canAdd` `canChange` `canDelete`.
-
-**Access.** The admin exposes every row of every registered model, so it fails closed. With `permissions` configured, they gate every page. With none configured it serves in development and returns 403 in production — convenient on day one, never an open admin by accident. Write requests are additionally rejected when `Origin` or `Sec-Fetch-Site` shows a cross-site submission.
-
-### Apps and settings
+Identity comes from a single `authenticate` hook in settings, which populates `context.user` for every request:
 
 ```ts
-// apps/blog/app.ts
-export default defineApp({ name: 'blog', prefix: '/', models: { Post, Author }, urls })
-
-// angus.config.ts
-export default defineSettings({
-  apps: [blog, accounts],
-  database: { dialect: 'sqlite', url: 'db.sqlite' },
-  prefix: '/api',
-  authenticate: async ({ request }) => resolveUser(request.headers.get('authorization')),
-  middleware: [cors()],
-  openapi: { title: 'My API', version: '1.0.0' },
-})
+authenticate: async ({ request }) => resolveUser(request.headers.get('authorization')),
 ```
 
-`authenticate` populates `context.user` for every request; permissions read it. Listing a model in an app's `models` is what makes migrations see it.
+The same rules protect REST endpoints, the admin, and MCP tools, because all three dispatch through the same routes.
+
+> **Today Angus provides the authorization model and expects you to supply identity.** A built-in auth app — user model, password hashing, sessions, tokens, social login, and an admin login page — is the next milestone. See [ROADMAP.md](ROADMAP.md).
 
 ---
 
@@ -302,32 +289,32 @@ export default defineSettings({
 | --- | --- |
 | `angus startproject <name>` | Scaffold a new project |
 | `angus startapp <name>` | Scaffold an app inside the project |
-| `angus runserver [--port] [--host]` | Development server |
-| `angus makemigrations [--name]` | Generate migrations from your models |
+| `angus runserver` | Development server |
+| `angus makemigrations` | Generate migrations from your models |
 | `angus migrate` | Apply pending migrations |
 | `angus routes` | Print the URL table |
 | `angus models` | Print every model and its columns |
-| `angus openapi [--out]` | Print or write the OpenAPI document |
-| `angus mcp [--list]` | Serve the API to agents over MCP (stdio) |
 | `angus check` | Validate the project without starting it |
+| `angus openapi [--out]` | Print or write the OpenAPI document |
+| `angus mcp [--list]` | Serve the API to agents over MCP |
 | `angus shell` | REPL with your models in scope |
 
-## Migrations
+---
 
-angusjs doesn't implement a migration engine — [drizzle-kit](https://orm.drizzle.team/kit-docs/overview) already diffs a schema against its history and emits SQL. `makemigrations` generates `.angus/schema.ts` (Drizzle tables built from your models) and hands over. The SQL lands in `migrations/` for you to read before applying it.
+## Databases and migrations
 
-`.angus/` is generated on every run and should not be committed or edited.
-
-## Databases
-
-SQLite and Postgres, both through Bun's built-in drivers.
+SQLite and Postgres, through Bun's built-in drivers.
 
 ```ts
 database: { dialect: 'sqlite',   url: 'db.sqlite' }
 database: { dialect: 'postgres', url: process.env.DATABASE_URL! }
 ```
 
+Angus does not implement a migration engine — [drizzle-kit](https://orm.drizzle.team/kit-docs/overview) already diffs a schema against its history and emits SQL. `makemigrations` generates `.angus/schema.ts` from your models and hands over, leaving reviewable SQL in `migrations/`.
+
 MySQL isn't supported: Drizzle's MySQL driver has no `RETURNING`, which the write path depends on.
+
+---
 
 ## Testing
 
@@ -335,20 +322,44 @@ MySQL isn't supported: Drizzle's MySQL driver has no `RETURNING`, which the writ
 
 ```ts
 const app = await createApp(settings, { connectDatabase: false })
-const response = await app.handle(new Request('http://test/api/posts'))
+const response = await app.handle(new Request('http://test/api/products'))
 ```
 
-## Design notes
+---
 
-**Why not a Model base class?** A class body can't produce the row type without decorators and a metaclass equivalent. `defineModel` infers `$row`, `$insert`, and `$update` from the field map, so the types follow the schema rather than being restated.
+## Design principles
 
-**Why Drizzle underneath?** SQL generation, dialect handling, and migration diffing are solved problems with sharp edges. angusjs owns the layer above: the Django-shaped API, the lookup language, the serializer bridge. `getConnection().db` is there when you need to drop down.
+**One source of truth.** Application contracts should not be restated across database schemas, validators, API docs, admin forms and agent tools.
 
-**Where the magic is.** Two places, both deliberate: models register themselves globally on definition (so migrations and the CLI can find them), and the connection lives in a module slot (so `Post.objects` needs no handle). Everything else is an ordinary value you can log.
+**Elysia first.** Angus composes with Elysia instead of hiding it. Every router compiles to an Elysia instance you can mount yourself.
+
+**Type-safe by default.** Types flow from the model through the stack without manual synchronisation. `defineModel` infers the row type rather than making you declare it twice.
+
+**Explicit security.** Authorization, validation and scoping are enforced at the route, so every interface — REST, admin, MCP — inherits them rather than reimplementing them.
+
+**Escape hatches.** Conventions without ownership. `getConnection().db` is the raw Drizzle handle, `router().toElysia()` is the raw Elysia instance, and `$where` takes raw SQL when the typed lookups aren't enough.
+
+---
 
 ## Status
 
-Version 0.1 — usable and tested, but the API may still move. Not yet published to npm.
+Under active development, pre-1.0. APIs may change.
+
+**Shipped:** models, migrations, QuerySets with typed lookups, serializers, views and view sets, permissions, admin, OpenAPI, MCP, CLI. 168 tests, clean typecheck.
+
+**Next:** authentication, transactions and richer relations, typed client generation, testing utilities, then background jobs and storage.
+
+The full plan, with priorities and rationale, is in [ROADMAP.md](ROADMAP.md).
+
+---
+
+## Philosophy
+
+Angus is not trying to replace Elysia. It is an application layer built on top of it.
+
+**Elysia provides the foundation. Angus provides the conventions. Your application owns the business logic.**
+
+---
 
 ## Licence
 

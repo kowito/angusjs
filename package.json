@@ -1,7 +1,7 @@
 {
   "name": "angusjs",
   "version": "0.1.0",
-  "description": "A batteries-included API framework for Bun — Django's ergonomics on top of ElysiaJS.",
+  "description": "The application framework for Elysia \u2014 define your model once and derive the schema, API, docs, admin and agent tools from it.",
   "type": "module",
   "license": "MIT",
   "bin": {
@@ -18,15 +18,31 @@
     "./admin": "./src/admin/index.ts",
     "./openapi": "./src/openapi/index.ts",
     "./mcp": "./src/mcp/index.ts",
-    "./http": "./src/http/index.ts",
-    "./testing": "./src/testing/index.ts"
+    "./http": "./src/http/index.ts"
   },
-  "files": ["src", "README.md"],
+  "files": [
+    "src",
+    "README.md",
+    "ARCHITECTURE.md",
+    "ROADMAP.md",
+    "LICENSE"
+  ],
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "bun test"
   },
-  "keywords": ["elysia", "bun", "django", "api", "framework", "orm", "drizzle"],
+  "keywords": [
+    "elysia",
+    "elysiajs",
+    "bun",
+    "api",
+    "framework",
+    "orm",
+    "drizzle",
+    "admin",
+    "openapi",
+    "mcp"
+  ],
   "dependencies": {
     "@sinclair/typebox": "^0.34.0",
     "drizzle-orm": "^0.45.2",
