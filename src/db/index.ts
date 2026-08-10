@@ -36,6 +36,8 @@ export type { Hook, HookContext, HookEvent } from './hooks.ts'
 export type { ManyToMany, ManyToManyConfig } from './manyToMany.ts'
 export type { PrefetchConfig, PrefetchMap, PrefetchResult, PrefetchSpec } from './prefetch.ts'
 export { Q } from './lookups.ts'
+export { searchCapability, searchTerms } from './search.ts'
+export type { SearchCapability, SearchOptions } from './search.ts'
 export type { Filter, FilterOf, OrderBy } from './lookups.ts'
 
 export { connect, disconnect, getConnection, hasConnection, setConnection } from './connection.ts'

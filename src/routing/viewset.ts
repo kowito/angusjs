@@ -66,8 +66,20 @@ export interface ModelViewSetOptions<M extends AnyModel> {
   objectPermissions?: ObjectPermission<M> | Partial<Record<DetailAction, ObjectPermission<M>>>
   /** Fields exposed as query filters — `?status=draft&views__gte=10`. */
   filterFields?: readonly (keyof M['fields'] & string)[]
-  /** Fields scanned by `?search=` using a case-insensitive OR. */
+  /**
+   * Fields scanned by `?search=`.
+   *
+   * Full-text on Postgres — stemming, stop words, quoted phrases — and
+   * substring matching on SQLite, through the same query parameter.
+   */
   searchFields?: readonly (keyof M['fields'] & string)[]
+  /**
+   * Order search results by relevance. Defaults to true.
+   *
+   * Worth turning off for a feed that has to stay chronological, where the most
+   * relevant result appearing above the newest would read as a bug.
+   */
+  searchRanking?: boolean
   /** Fields allowed in `?ordering=-createdAt,title`. */
   orderingFields?: readonly (keyof M['fields'] & string)[]
   /** Foreign keys to join on list and retrieve. */
@@ -204,6 +216,7 @@ export function modelViewSet<M extends AnyModel>(options: ModelViewSetOptions<M>
     objectPermissions,
     filterFields = [],
     searchFields = [],
+    searchRanking = true,
     orderingFields = [],
     selectRelated = [],
     hooks = {},
@@ -294,12 +307,15 @@ export function modelViewSet<M extends AnyModel>(options: ModelViewSetOptions<M>
 
         const search = (context.query as Record<string, unknown>)?.search
         if (typeof search === 'string' && search !== '' && searchFields.length > 0) {
-          queryset = queryset.filter(
-            Q.or(...searchFields.map((field) => ({ [`${field}__icontains`]: search }) as never)) as never,
-          )
+          // Full text on Postgres, substring matching on SQLite — the same call
+          // either way, so `?search=` improves with the database rather than
+          // needing the view to be rewritten.
+          queryset = queryset.search(search, searchFields as never[], { rank: searchRanking })
         }
 
         const ordering = parseOrdering((context.query as Record<string, unknown>)?.ordering, orderingFields)
+        // An explicit ordering is the caller asking for something specific, and
+        // relevance would override it — so it wins over the search ranking.
         if (ordering.length > 0) queryset = queryset.orderBy(...(ordering as never[]))
 
         if (!paginator) {

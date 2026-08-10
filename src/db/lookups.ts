@@ -112,6 +112,8 @@ export type Filter<F extends FieldMap> = UnionToIntersection<
 > & {
   /** Escape hatch for expressions the typed lookups don't cover. */
   $where?: SQL
+  /** Set by `search()`; resolved against the dialect at compile time. */
+  $search?: (ctx: ResolveContext) => SQL | null
 }
 
 export type FilterOf<M extends AnyModel> = Filter<M['fields']>
@@ -463,6 +465,13 @@ export function buildCondition(ctx: ResolveContext, model: AnyModel, condition: 
     if (value === undefined) continue
     if (key === '$where') {
       parts.push(value as SQL)
+      continue
+    }
+    // A search condition is built late, because the SQL it produces depends on
+    // the dialect and a queryset is composed before any connection is chosen.
+    if (key === '$search') {
+      const built = (value as (ctx: ResolveContext) => SQL | null)(ctx)
+      if (built) parts.push(built)
       continue
     }
     parts.push(buildLeaf(ctx, model, key, value))

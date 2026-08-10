@@ -14,6 +14,7 @@ import { hasHooks, runHooks } from './hooks.ts'
 import { attachPrefetches, resolvePrefetch, type PrefetchMap, type PrefetchResult, type ResolvedPrefetch } from './prefetch.ts'
 import { DoesNotExist, MultipleObjectsReturned } from './errors.ts'
 import { buildCondition, combine, Q, type Filter, type OrderBy, type QCondition, type ResolveContext } from './lookups.ts'
+import { searchCondition, searchRank, type SearchOptions } from './search.ts'
 import type { AnyModel, FieldMap, InsertOf, RowOf, UpdateOf } from './model.ts'
 
 type Condition<M extends AnyModel> = Filter<M['fields']> | Q<M['fields']>
@@ -29,6 +30,13 @@ interface QueryState {
   fields?: string[]
   selectRelated: string[]
   prefetch: ResolvedPrefetch[]
+  /**
+   * A relevance expression to order by, built when the dialect is known.
+   *
+   * Held as a builder rather than SQL because a queryset is constructed before
+   * any connection is chosen, and the expression differs per dialect.
+   */
+  searchRank?: (ctx: ResolveContext) => SQL | null
 }
 
 /** Sentinel meaning "explicitly no ordering", distinct from "none specified". */
@@ -89,6 +97,45 @@ export class QuerySet<M extends AnyModel, R = RowOf<M>> implements PromiseLike<R
   /** Removes matching rows from the result set. */
   exclude(...conditions: Condition<M>[]): QuerySet<M, R> {
     return this.derive({ excludes: [...this.state.excludes, ...(conditions as QCondition[])] })
+  }
+
+  /**
+   * Full-text search across the given fields.
+   *
+   * Postgres gets stemming, stop words and relevance ranking; SQLite gets
+   * substring matching over the same call, ranked by how many fields matched.
+   * The API does not differ, because making every caller branch on dialect
+   * would be a worse answer than a search that finds less in development.
+   *
+   * ```ts
+   * Post.objects.search('coastal erosion', ['title', 'body'])
+   * ```
+   *
+   * Results are ordered by relevance unless `rank: false`, which then leaves
+   * whatever ordering the queryset already had.
+   */
+  search(
+    query: string,
+    fields: readonly (keyof M['fields'] & string)[],
+    options: SearchOptions = {},
+  ): QuerySet<M, R> {
+    const trimmed = query.trim()
+    // An empty search is not a search: returning nothing would make a cleared
+    // search box look like a result set with no matches.
+    if (trimmed === '' || fields.length === 0) return this
+
+    const condition = (ctx: ResolveContext): SQL | null =>
+      searchCondition(ctx.dialect, this.model, ctx.table(this.model), fields, trimmed, options)
+
+    const next = this.derive({
+      filters: [...this.state.filters, { $search: condition } as unknown as QCondition],
+    })
+
+    if (options.rank === false) return next
+
+    return next.derive({
+      searchRank: (ctx) => searchRank(ctx.dialect, this.model, ctx.table(this.model), fields, trimmed, options),
+    })
   }
 
   /** `orderBy('-createdAt', 'title')`. A leading `-` means descending. */
@@ -253,16 +300,19 @@ export class QuerySet<M extends AnyModel, R = RowOf<M>> implements PromiseLike<R
     if (where) query = query.where(where)
 
     const ordering = this.effectiveOrdering()
-    if (ordering.length > 0) {
-      query = query.orderBy(
-        ...ordering.map((field) => {
-          const descending = field.startsWith('-')
-          const attr = attrFor(this.model, descending ? field.slice(1) : field)
-          const column = table[this.model.columns[attr]!]
-          return descending ? desc(column) : asc(column)
-        }),
-      )
-    }
+    // Relevance leads, and any explicit ordering breaks ties beneath it — a
+    // search ordered by date first is not a search.
+    const rank = this.state.searchRank?.(ctx)
+    const orderings = [
+      ...(rank ? [desc(rank)] : []),
+      ...ordering.map((field) => {
+        const descending = field.startsWith('-')
+        const attr = attrFor(this.model, descending ? field.slice(1) : field)
+        const column = table[this.model.columns[attr]!]
+        return descending ? desc(column) : asc(column)
+      }),
+    ]
+    if (orderings.length > 0) query = query.orderBy(...orderings)
 
     if (this.state.limit !== undefined) query = query.limit(this.state.limit)
     if (this.state.offset !== undefined) query = query.offset(this.state.offset)
@@ -766,6 +816,14 @@ export class Manager<M extends AnyModel> {
 
   orderBy(...fields: OrderBy<M['fields']>[]): QuerySet<M> {
     return this.all().orderBy(...fields)
+  }
+
+  search(
+    query: string,
+    fields: readonly (keyof M['fields'] & string)[],
+    options?: SearchOptions,
+  ): QuerySet<M> {
+    return this.all().search(query, fields, options)
   }
 
   selectRelated<K extends RelationNames<M>>(...relations: K[]) {

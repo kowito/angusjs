@@ -653,6 +653,25 @@ Angus is not trying to replace Elysia. It is an application layer built on top o
 
 MIT
 
+## Search
+
+```ts
+Post.objects.search('coastal erosion', ['title', 'body'])
+```
+
+Postgres gets full-text search — stemming, stop words, quoted phrases, `-`
+exclusion and relevance ranking. SQLite gets substring matching over the same
+call, ranked by how many fields matched. The API does not differ, because
+making every caller branch on dialect is a worse answer than a search that
+finds less in development.
+
+A view set with `searchFields` gets this on `?search=` automatically.
+
+Postgres uses `websearch_to_tsquery` rather than `to_tsquery`, which matters:
+`to_tsquery` throws a syntax error on ordinary typing, so wiring a search box
+straight into it turns a stray quote into a 500.
+
+
 ## Realtime
 
 Elysia already provides WebSockets. What a channel adds is the part that isn't

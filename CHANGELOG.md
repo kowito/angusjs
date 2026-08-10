@@ -5,6 +5,23 @@ contain breaking changes; those are listed first in each entry.
 
 ## Unreleased
 
+### Added — full-text search
+
+`Model.objects.search(query, fields)`, and `?search=` on any view set that
+declares `searchFields`.
+
+Postgres gets a real text search engine: stemming, stop words, quoted phrases,
+`-` exclusion and relevance ranking. SQLite gets substring matching through the
+same call, ranked by how many fields matched. The API is identical because the
+alternative — every caller branching on dialect — pushes the problem outward,
+and quality degrades in the direction you would want: finding fewer things in
+development is an inconvenience, while silently finding *different* things in
+production would be a bug.
+
+Postgres uses `websearch_to_tsquery`, not `to_tsquery`. The latter raises a
+syntax error on input as ordinary as an unbalanced quote, so a search box wired
+to it turns typing into a 500.
+
 ### Added — object-level permissions
 
 "Anyone signed in may read a post, but only its author may edit it" was not
