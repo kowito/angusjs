@@ -347,9 +347,9 @@ Under active development, pre-1.0. APIs may change.
 
 **Shipped:** models, migrations, QuerySets with typed lookups, serializers, views and view sets, permissions, admin, OpenAPI, MCP, CLI. 168 tests, clean typecheck.
 
-**Next:** authentication, transactions and richer relations, typed client generation, testing utilities, then background jobs and storage.
+**Next:** a published model IR with a conformance suite, testing utilities, then one coherent identity and authorization model consumed by REST, admin and MCP alike — followed by transactions and relations, application services, and typed client generation.
 
-The full plan, with priorities and rationale, is in [ROADMAP.md](ROADMAP.md).
+The goal it all serves: **make Elysia capable of carrying an entire production application without leaving the Elysia ecosystem.** The full plan, with priorities and rationale, is in [ROADMAP.md](ROADMAP.md).
 
 ---
 

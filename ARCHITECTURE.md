@@ -27,6 +27,12 @@ The rule that decides which side something falls on:
 
 Angus never reimplements routing, never wraps the context object, and never intercepts the request lifecycle. It produces Elysia primitives and hands them over.
 
+And when the seam is uncomfortable, the resolution is fixed in advance:
+
+> **If Elysia already solves it well, Angus integrates with it. If Angus discovers that Elysia needs a better primitive to support production applications, improve Elysia rather than rebuilding that primitive inside Angus.**
+
+The failure mode this prevents is gradual: a slightly awkward seam gets worked around, then the workaround grows, and eventually Angus *contains* Elysia rather than extending it. Places where that pressure is currently real — direction-aware schema types, route introspection, typed context extension — are tracked as upstream candidates in [ROADMAP.md](ROADMAP.md), not as things to build locally.
+
 ---
 
 ## The seam
@@ -145,6 +151,29 @@ column   schema    widget     route    operation  tool
 The same is true one level up. `RouteDefinition` carries method, path, schemas, permissions and metadata; the Elysia compiler, the OpenAPI generator and the MCP tool builder each read it without knowing about each other.
 
 This is the property the project exists to have. **A change that would desynchronise the surfaces is not expressible**, because there is only one place to make it.
+
+---
+
+## Planned: application services
+
+The current vocabulary — `Model → Serializer → ViewSet` — covers CRUD and stops there. Operations that aren't CRUD (`publishPost`, `refundInvoice`, `transferOwnership`) currently have nowhere to live except a route handler, which means re-implementing them for the admin, for an agent, and for a queue.
+
+The planned fourth primitive is an **application service**: a declaration in the same style as a model, which every surface reads.
+
+```text
+    REST      Admin      MCP       CLI       Jobs
+      └──────────┴─────────┼─────────┴─────────┘
+                           ▼
+                 Application Service
+                           ▼
+                        Model
+                           ▼
+                       Database
+```
+
+Structurally this is the same move the framework already makes one level down: a service declares its input schema, output schema, permissions and transaction boundary, and the surfaces become readers rather than re-implementations. It is also the natural home for the audit log and for agent confirmation on destructive operations, both of which would otherwise be duplicated per surface.
+
+Tracked in [ROADMAP.md](ROADMAP.md) under P2.
 
 ---
 
