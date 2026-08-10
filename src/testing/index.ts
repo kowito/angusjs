@@ -431,27 +431,39 @@ export function factory<M extends AnyModel>(model: M, defaults: FactoryDefaults<
 // Assertions
 // ---------------------------------------------------------------------------
 
-/** Counts the queries a block issues, for asserting the absence of an N+1. */
-export async function countQueries<T>(fn: () => Promise<T>): Promise<{ result: T; count: number }> {
-  const connection = getConnection()
-  let count = 0
+/**
+ * Counts the queries a block issues, for asserting the absence of an N+1.
+ *
+ * The logger lives on the *session*, not the database object — Drizzle passes
+ * it down at construction — so that is what gets swapped. Swapping `db.logger`
+ * silently counts nothing, which is a quiet way for an N+1 assertion to pass
+ * while proving nothing.
+ *
+ * ```ts
+ * const { count } = await countQueries(() => Author.objects.prefetch({ posts: Post }))
+ * expect(count).toBe(2)   // not 1 + one per author
+ * ```
+ */
+export async function countQueries<T>(
+  // PromiseLike, not Promise: a QuerySet is awaitable without being a Promise.
+  fn: () => PromiseLike<T> | T,
+): Promise<{ result: T; count: number }> {
+  const session = (getConnection().db as any).session
+  if (!session) throw new Error('countQueries: the active connection exposes no session to observe.')
 
-  const original = connection.db.constructor.prototype
-  // Drizzle exposes the logger it was constructed with; swapping it is the
-  // least invasive way to observe queries without wrapping every method.
-  const previousLogger = (connection.db as any).logger
-  ;(connection.db as any).logger = {
+  let count = 0
+  const previous = session.logger
+  session.logger = {
     logQuery() {
       count++
     },
   }
-  void original
 
   try {
     const result = await fn()
     return { result, count }
   } finally {
-    ;(connection.db as any).logger = previousLogger
+    session.logger = previous
   }
 }
 

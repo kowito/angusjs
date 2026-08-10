@@ -5,6 +5,32 @@ contain breaking changes; those are listed first in each entry.
 
 ## Unreleased
 
+### Added — relations
+
+**`prefetch()`** for reverse relations. `selectRelated` joins the many-to-one
+direction; a one-to-many join would multiply the parent row and break `limit`,
+so this issues one extra query per relation instead — 50 authors with their
+posts is two queries, not fifty-one.
+
+```ts
+const authors = await Author.objects.prefetch({ posts: Post })
+authors[0].posts   // PostRow[], typed, no second round trip
+```
+
+The related model is passed explicitly rather than looked up by a reverse name,
+which keeps the result typed without a global registry and keeps the extra query
+visible at the call site. An ambiguous relation — two foreign keys pointing at
+the same model — is an error naming the `via` that resolves it, rather than a
+guess that would produce quietly wrong data.
+
+### Fixed — testing
+
+- **`countQueries()` counted nothing.** Drizzle keeps its logger on the
+  *session*, not the database object, so swapping `db.logger` was a no-op — an
+  N+1 assertion would have passed while proving nothing. It now swaps
+  `db.session.logger`, and the prefetch suite asserts the query count stays at 2
+  as the row count grows.
+
 ### Added — production layer
 
 **Security.** `csrf()`, `securityHeaders()` and `cors()`, on by default where

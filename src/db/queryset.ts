@@ -10,6 +10,7 @@ import { asc, avg, count as countAgg, desc, eq, max as maxAgg, min as minAgg, su
 import { getConnection, type Connection } from './connection.ts'
 import { isFExpression } from './expressions.ts'
 import { activeDb } from './transaction.ts'
+import { attachPrefetches, resolvePrefetch, type PrefetchMap, type PrefetchResult, type ResolvedPrefetch } from './prefetch.ts'
 import { DoesNotExist, MultipleObjectsReturned } from './errors.ts'
 import { buildCondition, combine, Q, type Filter, type OrderBy, type QCondition, type ResolveContext } from './lookups.ts'
 import type { AnyModel, FieldMap, InsertOf, RowOf, UpdateOf } from './model.ts'
@@ -26,6 +27,7 @@ interface QueryState {
   /** Attribute subset requested via `values()`/`only()`. */
   fields?: string[]
   selectRelated: string[]
+  prefetch: ResolvedPrefetch[]
 }
 
 /** Sentinel meaning "explicitly no ordering", distinct from "none specified". */
@@ -37,6 +39,7 @@ const EMPTY: QueryState = {
   ordering: [],
   distinct: false,
   selectRelated: [],
+  prefetch: [],
 }
 
 /** `author` -> `authorId`, matching the row shape. */
@@ -151,6 +154,25 @@ export class QuerySet<M extends AnyModel, R = RowOf<M>> implements PromiseLike<R
     })
   }
 
+  /**
+   * Fetches a reverse relation in one extra query rather than one per row.
+   *
+   * `selectRelated` joins the many-to-one direction; this covers one-to-many,
+   * where a join would multiply the parent row and break `limit`.
+   *
+   * ```ts
+   * const authors = await Author.objects.prefetch({ posts: Post })
+   * authors[0].posts        // PostRow[], no second round trip
+   * ```
+   *
+   * The related model is named explicitly, which keeps the result typed and
+   * keeps the extra query visible at the call site.
+   */
+  prefetch<const Spec extends PrefetchMap>(spec: Spec): QuerySet<M, R & PrefetchResult<Spec>> {
+    const resolved = Object.entries(spec).map(([key, entry]) => resolvePrefetch(this.model, key, entry))
+    return this.deriveAs<R & PrefetchResult<Spec>>({ prefetch: [...this.state.prefetch, ...resolved] })
+  }
+
   // -------------------------------------------------------------------------
   // Compilation
   // -------------------------------------------------------------------------
@@ -258,7 +280,13 @@ export class QuerySet<M extends AnyModel, R = RowOf<M>> implements PromiseLike<R
   // -------------------------------------------------------------------------
 
   async execute(): Promise<R[]> {
-    return (await this.compile(getConnection())) as R[]
+    const rows = (await this.compile(getConnection())) as R[]
+
+    if (this.state.prefetch.length > 0) {
+      await attachPrefetches(this.model, rows as Record<string, unknown>[], this.state.prefetch)
+    }
+
+    return rows
   }
 
   then<TResult1 = R[], TResult2 = never>(
@@ -537,6 +565,10 @@ export class Manager<M extends AnyModel> {
 
   selectRelated<K extends RelationNames<M>>(...relations: K[]) {
     return this.all().selectRelated(...relations)
+  }
+
+  prefetch<const Spec extends PrefetchMap>(spec: Spec) {
+    return this.all().prefetch(spec)
   }
 
   get(...conditions: Condition<M>[]): Promise<RowOf<M>> {

@@ -148,7 +148,10 @@ await Product.objects.filter({ status: 'active', price__gte: '10.00' })
 await Product.objects.get({ id: 3 })              // throws DoesNotExist
 await Product.objects.filter({ supplier__country: 'GB' })   // traverses the relation
 await Product.objects.selectRelated('supplier')   // joins; product.supplier.name
+await Supplier.objects.prefetch({ products: Product })  // one extra query, not one per row
 ```
+
+`selectRelated` joins the many-to-one direction. `prefetch` covers the other, where a join would multiply the parent row and break `limit` — so 50 suppliers with their products is **two queries, not fifty-one**. The related model is named explicitly, which keeps the result typed and keeps the extra query visible at the call site rather than hidden behind an attribute access.
 
 Lookups are typed: `price__gte` only accepts the field's type, `name__in` only an array, and a misspelled field is a compile error.
 

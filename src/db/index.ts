@@ -27,6 +27,8 @@ export { Manager, QuerySet } from './queryset.ts'
 export { atomic, inTransaction, rollbackAfter, Rollback } from './transaction.ts'
 export type { AtomicOptions } from './transaction.ts'
 export { F, FExpression, isFExpression } from './expressions.ts'
+export { attachPrefetches, resolvePrefetch } from './prefetch.ts'
+export type { PrefetchConfig, PrefetchMap, PrefetchResult, PrefetchSpec } from './prefetch.ts'
 export { Q } from './lookups.ts'
 export type { Filter, FilterOf, OrderBy } from './lookups.ts'
 
