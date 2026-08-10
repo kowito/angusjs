@@ -27,7 +27,7 @@ const Post = defineModel('opPost', {
 const PostSerializer = serializer(Post, { readOnly: ['id'] })
 
 let db: TestDatabase
-let app: Elysia
+let app: Elysia<any, any>
 
 /** The caller is whoever `x-user` names; 0 means anonymous. */
 const asUser = (id: number) => (id === 0 ? {} : { 'x-user': String(id) })
