@@ -153,6 +153,23 @@ await Supplier.objects.prefetch({ products: Product })  // one extra query, not 
 
 `selectRelated` joins the many-to-one direction. `prefetch` covers the other, where a join would multiply the parent row and break `limit` — so 50 suppliers with their products is **two queries, not fifty-one**. The related model is named explicitly, which keeps the result typed and keeps the extra query visible at the call site rather than hidden behind an attribute access.
 
+Many-to-many is a helper over a join model you own, never a hidden table:
+
+```ts
+const ArticleTag = defineModel('articleTag', {
+  fields: { article: f.foreignKey(() => Article), tag: f.foreignKey(() => Tag) },
+  meta: { uniqueTogether: [['article', 'tag']] },
+})
+
+const tags = manyToMany({ from: Article, to: Tag, through: ArticleTag })
+
+await tags.add(article.id, [1, 2])     // re-adding is a no-op, not a constraint error
+await tags.set(article.id, [2, 3])     // one transaction; a failure changes nothing
+await tags.forMany([1, 2, 3])          // Map<articleId, TagRow[]>, two queries
+```
+
+The "extra column on the join" moment (`addedAt`, `role`, `quantity`) arrives in almost every project. Because the join is an ordinary model, adding one is a normal field — not a migration away from a hidden table.
+
 Lookups are typed: `price__gte` only accepts the field's type, `name__in` only an array, and a misspelled field is a compile error.
 
 ```text

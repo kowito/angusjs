@@ -28,6 +28,8 @@ export { atomic, inTransaction, rollbackAfter, Rollback } from './transaction.ts
 export type { AtomicOptions } from './transaction.ts'
 export { F, FExpression, isFExpression } from './expressions.ts'
 export { attachPrefetches, resolvePrefetch } from './prefetch.ts'
+export { manyToMany } from './manyToMany.ts'
+export type { ManyToMany, ManyToManyConfig } from './manyToMany.ts'
 export type { PrefetchConfig, PrefetchMap, PrefetchResult, PrefetchSpec } from './prefetch.ts'
 export { Q } from './lookups.ts'
 export type { Filter, FilterOf, OrderBy } from './lookups.ts'

@@ -23,6 +23,17 @@ visible at the call site. An ambiguous relation — two foreign keys pointing at
 the same model — is an error naming the `via` that resolves it, rather than a
 guess that would produce quietly wrong data.
 
+**Many-to-many** via `manyToMany({ from, to, through })`. The join table is an
+ordinary model you define, never a hidden one the ORM owns — because the "extra
+column on the join" moment arrives in almost every project, and in ORMs that
+hide the table it means migrating to a through model you should have had from
+the start.
+
+`add()` ignores links that already exist rather than raising a uniqueness error,
+so a resubmitted form is harmless. `set()` runs in one transaction and leaves
+untouched links alone, preserving their extra columns. `forMany()` groups by
+owner in two queries regardless of how many owners.
+
 ### Fixed — testing
 
 - **`countQueries()` counted nothing.** Drizzle keeps its logger on the

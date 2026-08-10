@@ -37,6 +37,8 @@ export type {
 export { connect, disconnect, getConnection } from './db/connection.ts'
 export { atomic, inTransaction, rollbackAfter, Rollback } from './db/transaction.ts'
 export { F, FExpression } from './db/expressions.ts'
+export { manyToMany } from './db/manyToMany.ts'
+export type { ManyToMany } from './db/manyToMany.ts'
 export { DoesNotExist, IntegrityError, MultipleObjectsReturned } from './db/errors.ts'
 
 // Serializers
