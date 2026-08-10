@@ -258,7 +258,8 @@ describe('modern negotiation', () => {
   })
 
   test('an unimplemented method returns 404 with a JSON-RPC error', async () => {
-    const { status, body } = await modern({ jsonrpc: '2.0', id: 1, method: 'resources/list' })
+    // `prompts/*` is genuinely unimplemented; `resources/*` is not any more.
+    const { status, body } = await modern({ jsonrpc: '2.0', id: 1, method: 'prompts/list' })
     expect(status).toBe(404)
     expect(body.error.code).toBe(-32601)
   })

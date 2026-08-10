@@ -12,6 +12,7 @@ import { page } from '../html.ts'
 import { consoleAuditSink, jsonlAuditSink, type AuditSink } from '../mcp/audit.ts'
 import { mcpHttpRoutes, type ServerIdentity } from '../mcp/index.ts'
 import { policyTools } from '../mcp/policy.ts'
+import { buildResources, type Resource } from '../mcp/resources.ts'
 import { realtime } from '../realtime/index.ts'
 import { buildTools, type Tool } from '../mcp/tools.ts'
 import { generateOpenApi, renderDocs, type OpenApiDocument } from '../openapi/index.ts'
@@ -88,6 +89,21 @@ export function projectTools(rawSettings: Settings): Tool[] {
 }
 
 /** Name and version reported to MCP clients. */
+/**
+ * What an agent may read before it acts.
+ *
+ * Built from the same declarations the server runs on, so the schema an agent
+ * reads is the one the API will enforce — the alternative is an agent learning
+ * the domain by causing failures against write endpoints.
+ */
+export function projectResources(rawSettings: Settings): Resource[] {
+  const settings = resolveSettings(rawSettings)
+  const routes = projectRouter(settings.apps, settings.prefix).flatten()
+  const openapi = settings.openapi === false ? undefined : () => projectSpec(rawSettings)
+
+  return buildResources({ models: appModels(settings.apps), routes, openapi })
+}
+
 export function mcpIdentity(rawSettings: Settings): ServerIdentity {
   const settings = resolveSettings(rawSettings)
   const mcp = settings.mcp === false ? {} : (settings.mcp ?? {})
@@ -130,6 +146,7 @@ function mcpRoutes(
   let tools: Tool[] | undefined
   const identity = mcpIdentity(rawSettings)
   const audit = resolveAuditSink(mcp.audit)
+  let resources: Resource[] | undefined
 
   return mcpHttpRoutes({
     path: mcp.path ?? '/mcp',
@@ -142,6 +159,8 @@ function mcpRoutes(
       identity,
       policy: mcp.policy,
       audit,
+      // Built once: the declarations they describe do not change at runtime.
+      resources: (resources ??= projectResources(rawSettings)),
       origin: new URL(request.url).origin,
       headers: request.headers,
     }),

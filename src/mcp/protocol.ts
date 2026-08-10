@@ -15,6 +15,7 @@
 import type { Elysia } from 'elysia'
 import { emitAudit, fingerprint, redact, type AuditEvent, type AuditSink } from './audit.ts'
 import { checkConfirmation, needsConfirmation, type ToolPolicy } from './policy.ts'
+import { readResource, toResourceDefinition, type Resource } from './resources.ts'
 import { callTool, toDefinition, type Tool } from './tools.ts'
 
 export const PROTOCOL_VERSION_KEY = 'io.modelcontextprotocol/protocolVersion'
@@ -92,6 +93,8 @@ export interface DispatchContext {
   policy?: ToolPolicy
   /** Where the record of each call goes. */
   audit?: AuditSink
+  /** What the agent may read before it acts. */
+  resources?: Resource[]
   identity: ServerIdentity
   /** Origin used to build the synthetic request URL. */
   origin?: string
@@ -125,7 +128,13 @@ export function resolveEra(message: JsonRpcRequest, headerVersion?: string | nul
   return { modern: (MODERN_VERSIONS as readonly string[]).includes(declared), version: declared }
 }
 
-const CAPABILITIES = { tools: { listChanged: false } }
+const CAPABILITIES = {
+  tools: { listChanged: false },
+  // Subscriptions would need a server-to-client channel the stateless POST
+  // transport does not have; the resources themselves are generated per read,
+  // so they are never stale anyway.
+  resources: { listChanged: false, subscribe: false },
+}
 
 /**
  * Handles one JSON-RPC message. Returns `null` for notifications, which have no
@@ -182,6 +191,21 @@ export async function dispatch(
 
     case 'tools/call':
       return callToolMessage(context, message, id)
+
+    case 'resources/list':
+      return result(id, { resources: (context.resources ?? []).map(toResourceDefinition) })
+
+    case 'resources/read': {
+      const uri = message.params?.uri as string | undefined
+      try {
+        const contents = await readResource(context.resources ?? [], String(uri))
+        return result(id, { contents: [contents] })
+      } catch (error) {
+        // An unreadable resource is a bad request, not a failed operation:
+        // unlike a tool call, there is no result for the model to learn from.
+        return failure(id, JSON_RPC_ERRORS.invalidParams, error instanceof Error ? error.message : String(error))
+      }
+    }
 
     default:
       return failure(id, JSON_RPC_ERRORS.methodNotFound, `Method not found: ${message.method}`)

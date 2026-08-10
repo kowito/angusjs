@@ -41,6 +41,23 @@ proxies that mishandle upgrades.
 The default broker is in-process, which is correct for one server and wrong for
 two. `setBroker()` replaces it without any application code changing.
 
+### Added — MCP resources
+
+Tools say what an agent may do; they say little about the shape of the data
+behind them. An agent with only tools learns the domain by trying things, which
+on a write endpoint means learning by causing failures.
+
+The server now serves `resources/list` and `resources/read`: the model list,
+each model's fields with their types, constraints and relations, the route
+table, and the OpenAPI document. All generated from the declarations the server
+runs on, so what the agent reads is what the API enforces.
+
+The field description answers the question agents get wrong first — which
+values the *caller* must supply, as against those the database fills in. A
+relation names the model to go and read next rather than the column. The route
+resource says a route is guarded without saying how, since the latter is a map
+of what to attack.
+
 ### Added — agent policy, confirmation and audit
 
 Route permissions already stop an agent exceeding the person operating it,

@@ -41,6 +41,9 @@ export {
 } from './audit.ts'
 export type { AuditEvent, AuditSink } from './audit.ts'
 
+export { buildResources, readResource, toResourceDefinition } from './resources.ts'
+export type { Resource, ResourceContents, ResourceOptions } from './resources.ts'
+
 export { mcpHttpRoutes } from './http.ts'
 export type { McpHttpOptions } from './http.ts'
 

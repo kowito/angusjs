@@ -9,7 +9,7 @@
 import { homedir } from 'node:os'
 import { basename, resolve } from 'node:path'
 import type { LoadedProject } from '../../core/config.ts'
-import { createApp, mcpIdentity, projectTools } from '../../core/project.ts'
+import { createApp, mcpIdentity, projectResources, projectTools } from '../../core/project.ts'
 import { resolveSettings, type McpSettings } from '../../core/settings.ts'
 import { jsonlAuditSink, type AuditSink } from '../../mcp/audit.ts'
 import { needsConfirmation } from '../../mcp/policy.ts'
@@ -55,6 +55,7 @@ export async function mcp(project: LoadedProject, args: string[]): Promise<numbe
     // The same policy the HTTP endpoint enforces. A local agent is not a
     // trusted one: it is the one most likely to be pointed at production data.
     policy: mcpSettings.policy,
+    resources: projectResources(project.settings),
     audit: mcpSettings.audit === undefined ? undefined : resolveCliAuditSink(mcpSettings.audit),
     origin: 'http://mcp.local',
   })
