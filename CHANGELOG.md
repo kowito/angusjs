@@ -5,6 +5,17 @@ contain breaking changes; those are listed first in each entry.
 
 ## Unreleased
 
+### Added — documentation site
+
+Thirteen pages in `docs/`, building to a static site with
+`bun scripts/build-docs.ts`. The README was carrying 730 lines of reference
+material and is now 194, pointing at the pages instead.
+
+The generator is hand-rolled for the same reason the framework has two runtime
+dependencies: the whole job is turning a dozen markdown files into a dozen HTML
+files with a sidebar. Output is self-contained — no CDN, no build step, no
+JavaScript needed to read a page.
+
 ### Added — JWT, OIDC and social sign-in
 
 `signJwt` / `verifyJwt` for shared-secret tokens, and `verifyJwtWithJwks` for

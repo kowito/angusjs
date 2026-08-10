@@ -34,6 +34,7 @@
   },
   "files": [
     "src",
+    "docs",
     "!src/**/*.test.ts",
     "README.md",
     "ARCHITECTURE.md",
@@ -43,6 +44,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "bun test",
+    "docs": "bun scripts/build-docs.ts",
     "prepublishOnly": "bun run typecheck && bun test"
   },
   "keywords": [

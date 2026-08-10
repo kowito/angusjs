@@ -8,3 +8,6 @@ generated-live.ts
 .client-check/
 storage-test
 .storage-test/
+
+# Built documentation — regenerate with `bun scripts/build-docs.ts`.
+site/
