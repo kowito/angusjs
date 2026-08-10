@@ -173,7 +173,7 @@ bun scripts/build-docs.ts
 
 Pre-1.0 and not yet published to npm. The API is stabilising but not frozen.
 
-[ROADMAP.md](ROADMAP.md) tracks what is built and what is not, honestly — including the parts that are not code.
+[ROADMAP.md](ROADMAP.md) tracks what is built and what is not, honestly — including the parts that are not code. [UPSTREAM.md](UPSTREAM.md) records what building this found in Elysia, corrections included.
 
 ---
 

@@ -30,12 +30,12 @@ work — plus four features.
 | P3 Developer experience | Shipped. Typed client, `generate crud`, `seed`, scaffolding, admin, inspection commands. |
 | P4 Batteries | Shipped. Jobs, email, storage, cache, rate limiting, realtime, MCP resources, full-text search. |
 | P5 Operational layer | Shipped. OpenTelemetry, health, graceful shutdown, structured logging, config validation, migration checking, security headers. |
-| Continuous | Documentation site shipped. Elysia upstream contributions not started. |
+| Continuous | Documentation site shipped. Elysia friction investigated and written up in [UPSTREAM.md](UPSTREAM.md). |
 
 **Outstanding, in the order they matter:**
 
 1. **Published to npm.** Everything else is unusable by anyone else until this happens.
-2. **Elysia upstream contributions.** Direction-aware schema types and route introspection are the two candidates the architecture has actually run into.
+2. **One upstream report to Elysia.** Investigating the friction found that three of five candidates were not gaps at all — including route introspection, which this roadmap had wrong, and request wrapping, which turned out to be possible and is now used for tracing. What remains is a WebSocket footgun and a documentation contribution. See [UPSTREAM.md](UPSTREAM.md).
 
 The percentage is a poor summary of the remaining work: publishing and docs are
 small in code and large in whether the project is usable by anyone else.
@@ -492,6 +492,8 @@ Elysia → Angus → Model → API → Auth → Admin
 Undocumented architecture accumulates a debt that gets more expensive to pay the longer it is deferred, because the person who understood it has moved on.
 
 ### Elysia contribution track
+
+Findings are recorded in [UPSTREAM.md](UPSTREAM.md), verified against the installed version rather than recalled. Claims that did not survive probing are kept there with their corrections — a track that only records confirmed suspicions is not evidence of anything.
 
 The roadmap's second question, alongside *what should Angus build?*:
 
