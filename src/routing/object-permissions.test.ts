@@ -26,16 +26,13 @@ const Post = defineModel('opPost', {
 
 const PostSerializer = serializer(Post, { readOnly: ['id'] })
 
-let db: TestDatabase
-let app: Elysia<any, any>
-
-/** The caller is whoever `x-user` names; 0 means anonymous. */
-const asUser = (id: number) => (id === 0 ? {} : { 'x-user': String(id) })
-
-beforeAll(async () => {
-  db = await testDatabase({ models: [Post] })
-
-  app = new Elysia()
+/**
+ * Built by a function rather than annotated: `.resolve()` widens the instance
+ * type, so any annotation you could write here would be a lie about what is
+ * assigned to it.
+ */
+function buildApp() {
+  return new Elysia()
     .use(errorTranslation({ debug: false }))
     .resolve(({ request }) => {
       const id = Number(request.headers.get('x-user') ?? 0)
@@ -54,6 +51,17 @@ beforeAll(async () => {
         },
       }).toElysia({ prefix: '/posts' }),
     )
+}
+
+let db: TestDatabase
+let app: ReturnType<typeof buildApp>
+
+/** The caller is whoever `x-user` names; 0 means anonymous. */
+const asUser = (id: number): Record<string, string> => (id === 0 ? {} : { 'x-user': String(id) })
+
+beforeAll(async () => {
+  db = await testDatabase({ models: [Post] })
+  app = buildApp()
 })
 
 afterAll(async () => {
