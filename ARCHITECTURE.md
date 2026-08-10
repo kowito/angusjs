@@ -242,7 +242,14 @@ The dependency direction is strictly downward: `core` may import `routing`, `rou
 Being explicit about the costs:
 
 - **Bun only.** `bun:sqlite` and `Bun.SQL` are used directly. A Node compatibility layer would cost the performance advantage and double the test matrix.
-- **SQLite and Postgres only.** The write path depends on `RETURNING`, which Drizzle's MySQL driver lacks.
+- **SQLite and Postgres only — settled, not pending.** Every write goes through
+  `RETURNING` so `create()` and `update()` hand back the row the database
+  actually stored, defaults and triggers included. Drizzle's MySQL driver has no
+  `RETURNING`, so supporting MySQL would mean a second write path that issues a
+  follow-up `SELECT` — which is not equivalent: it is a second round trip, it is
+  not atomic with the write, and under concurrent updates it can return someone
+  else's version of the row. Two write paths with different consistency
+  guarantees is a worse thing to own than one missing dialect.
 - **Models register globally at definition time.** This is what lets migrations and the CLI find them without a manifest, at the cost of a module-level registry.
 - **One connection in a module slot.** `Product.objects` needs no handle threaded through every call — the same trade Django makes with `settings.DATABASES`. `setConnection()` exists for tests.
 

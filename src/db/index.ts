@@ -23,7 +23,9 @@ export type {
   UpdateRow,
 } from './model.ts'
 
-export { Manager, QuerySet } from './queryset.ts'
+export { Manager, QuerySet, encodeCursor, decodeCursor } from './queryset.ts'
+export type { CursorPage, CursorPageOptions } from './queryset.ts'
+export { alive, aliveQueryset, deleted, publicId, restore, softDelete, softRemove, timestamps } from './mixins.ts'
 export { atomic, inTransaction, rollbackAfter, Rollback } from './transaction.ts'
 export type { AtomicOptions } from './transaction.ts'
 export { F, FExpression, isFExpression } from './expressions.ts'

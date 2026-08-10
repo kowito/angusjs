@@ -39,6 +39,7 @@ export { atomic, inTransaction, rollbackAfter, Rollback } from './db/transaction
 export { F, FExpression } from './db/expressions.ts'
 export { manyToMany } from './db/manyToMany.ts'
 export { invalidateCacheOnWrite, onModel, onModelAny } from './db/hooks.ts'
+export { alive, aliveQueryset, deleted, publicId, restore, softDelete, softRemove, timestamps } from './db/mixins.ts'
 export type { Hook, HookContext, HookEvent } from './db/hooks.ts'
 export type { ManyToMany } from './db/manyToMany.ts'
 export { DoesNotExist, IntegrityError, MultipleObjectsReturned } from './db/errors.ts'

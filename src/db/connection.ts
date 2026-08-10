@@ -10,6 +10,15 @@ import { registeredModels, type AnyModel } from './model.ts'
 import { buildTables, type Dialect, type TableMap } from './schema.ts'
 
 export interface DatabaseConfig {
+  /**
+   * SQLite or Postgres.
+   *
+   * MySQL is deliberately unsupported: every write uses `RETURNING` so
+   * `create()` and `update()` give back the row as stored. Drizzle's MySQL
+   * driver has none, and the follow-up `SELECT` that would replace it is a
+   * second round trip that is not atomic with the write — under concurrent
+   * updates it can return another transaction's version of the row.
+   */
   dialect: Dialect
   /**
    * SQLite: a file path or `:memory:`.

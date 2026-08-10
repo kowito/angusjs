@@ -5,6 +5,33 @@ contain breaking changes; those are listed first in each entry.
 
 ## Unreleased
 
+### Added — ORM ergonomics
+
+Field mixins (`timestamps()`, `softDelete()`, `publicId()`) as plain objects
+rather than model inheritance, so what ends up on the table stays visible at the
+declaration.
+
+`softDelete()` adds `deletedAt` plus `alive()`, `deleted()`, `softRemove()` and
+`restore()`. It deliberately does **not** make `delete()` soft: silently
+reinterpreting a call means a developer reading it cannot tell what it does.
+
+`groupBy()` aggregates per group, the counterpart to `aggregate()`. `page()`
+does keyset pagination — one query per page, no count, and immune to the
+shifting that makes offset pagination show a reader the same row twice.
+`Model.objects.query()` exposes the Drizzle builder for anything the lookup
+language cannot express.
+
+`Manager` was missing `aggregate`, `values` and `limit` proxies; added.
+
+### Decided — MySQL
+
+Not supported, and settled rather than pending. Every write uses `RETURNING` so
+`create()` and `update()` return the row as stored. Drizzle's MySQL driver has
+none, and the follow-up `SELECT` that would replace it is a second round trip,
+not atomic with the write, and can return another transaction's version of the
+row. Two write paths with different consistency guarantees is worse to own than
+one missing dialect.
+
 ### Added — cache and model hooks
 
 `cached()`, `getCache()`, `cacheResponses()` and a `CacheStore` interface with an

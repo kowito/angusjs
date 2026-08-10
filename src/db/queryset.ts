@@ -384,6 +384,105 @@ export class QuerySet<M extends AnyModel, R = RowOf<M>> implements PromiseLike<R
     return result
   }
 
+  /**
+   * Aggregates per group rather than over the whole queryset.
+   *
+   * ```ts
+   * await Post.objects.groupBy('status', { total: 'count:id', views: 'sum:views' })
+   * // [{ status: 'draft', total: 3, views: 12 }, ...]
+   * ```
+   *
+   * The counterpart to `aggregate()`, which collapses everything to one row.
+   */
+  async groupBy<K extends keyof R & string, S extends Record<string, AggregateSpec<M>>>(
+    field: K | K[],
+    spec: S,
+  ): Promise<(Pick<R, K> & Record<keyof S, number | null>)[]> {
+    const connection = getConnection()
+    const ctx = this.context(connection)
+    const table = connection.table(this.model)
+
+    const groupAttrs = (Array.isArray(field) ? field : [field]).map((key) => attrFor(this.model, key))
+    const selection: Record<string, any> = {}
+
+    for (const attr of groupAttrs) {
+      selection[rowKey(this.model, attr)] = table[this.model.columns[attr]!]
+    }
+    for (const [alias, expression] of Object.entries(spec)) {
+      selection[alias] = aggregateExpression(this.model, table, expression as string)
+    }
+
+    let query = activeDb(connection).select(selection).from(table).$dynamic()
+
+    const where = this.where(ctx)
+    if (where) query = query.where(where)
+
+    query = query.groupBy(...groupAttrs.map((attr) => table[this.model.columns[attr]!]))
+
+    const ordering = this.effectiveOrdering()
+    if (ordering.length > 0) {
+      query = query.orderBy(
+        ...ordering.map((entry) => {
+          const descending = entry.startsWith('-')
+          const attr = attrFor(this.model, descending ? entry.slice(1) : entry)
+          const column = table[this.model.columns[attr]!]
+          return descending ? desc(column) : asc(column)
+        }),
+      )
+    }
+
+    if (this.state.limit !== undefined) query = query.limit(this.state.limit)
+
+    const rows = (await query) as Record<string, unknown>[]
+
+    // Aggregates come back as strings from some drivers; the caller asked for
+    // numbers, so coerce here rather than in every call site.
+    return rows.map((row) => {
+      const result: Record<string, unknown> = { ...row }
+      for (const alias of Object.keys(spec)) {
+        const value = row[alias]
+        result[alias] = value === null || value === undefined ? null : Number(value)
+      }
+      return result
+    }) as never
+  }
+
+  /**
+   * Keyset pagination: rows after a cursor, ordered by a unique column.
+   *
+   * Offset pagination degrades as the offset grows — the database still walks
+   * the skipped rows — and shifts under concurrent writes, so a user paging
+   * forward can see the same row twice. A cursor has neither problem.
+   *
+   * The ordering column must be unique, or a page boundary can skip rows.
+   */
+  async page(options: CursorPageOptions = {}): Promise<CursorPage<R>> {
+    const field = options.field ?? this.model.pk
+    const descending = options.descending ?? false
+    const size = Math.max(1, options.size ?? 25)
+
+    let queryset = this.derive({ ordering: [descending ? `-${field}` : field] })
+
+    if (options.after !== undefined && options.after !== null) {
+      const decoded = decodeCursor(options.after)
+      queryset = queryset.filter({ [`${field}__${descending ? 'lt' : 'gt'}`]: decoded } as never)
+    }
+
+    // One extra row is fetched purely to answer "is there a next page?"
+    // without a second count query.
+    const rows = await queryset.limit(size + 1).execute()
+    const hasMore = rows.length > size
+    const page = hasMore ? rows.slice(0, size) : rows
+
+    const last = page[page.length - 1] as Record<string, unknown> | undefined
+
+    return {
+      results: page,
+      nextCursor: hasMore && last ? encodeCursor(last[field]) : null,
+      hasMore,
+    }
+  }
+
   /** A `{ [pkValue]: row }` map — convenient for hydrating lists. */
   async inBulk(): Promise<Record<string, R>> {
     const rows = await this.execute()
@@ -512,6 +611,15 @@ export class QuerySet<M extends AnyModel, R = RowOf<M>> implements PromiseLike<R
   }
 
   /**
+   * The Drizzle query builder for this model's table, already typed to it.
+   * The escape hatch for a query the lookup language cannot express.
+   */
+  query(): { db: any; table: Record<string, any> } {
+    const connection = getConnection()
+    return { db: activeDb(connection), table: connection.table(this.model) }
+  }
+
+  /**
    * Maps a `{ attr: value }` object onto physical columns, applying JS-side
    * defaults and auto timestamps along the way.
    */
@@ -557,6 +665,60 @@ export class QuerySet<M extends AnyModel, R = RowOf<M>> implements PromiseLike<R
     }
 
     return values
+  }
+}
+
+/** Builds the SQL aggregate for a `sum:field` style expression. */
+function aggregateExpression(model: AnyModel, table: Record<string, any>, expression: string): any {
+  const [fn, field] = expression.split(':') as [string, string]
+  const column = table[model.columns[attrFor(model, field)]!]
+
+  switch (fn) {
+    case 'sum':
+      return sum(column)
+    case 'avg':
+      return avg(column)
+    case 'min':
+      return minAgg(column)
+    case 'max':
+      return maxAgg(column)
+    default:
+      return countAgg(column)
+  }
+}
+
+export interface CursorPageOptions {
+  /** Column to page by. Must be unique. Defaults to the primary key. */
+  field?: string
+  /** Rows per page. Defaults to 25. */
+  size?: number
+  /** Opaque cursor from a previous page. */
+  after?: string | null
+  descending?: boolean
+}
+
+export interface CursorPage<R> {
+  results: R[]
+  /** Pass as `after` to fetch the next page. `null` at the end. */
+  nextCursor: string | null
+  hasMore: boolean
+}
+
+/**
+ * Cursors are base64url so they read as opaque. That is presentation, not
+ * security: a client can decode one, and nothing depends on it not doing so.
+ */
+export function encodeCursor(value: unknown): string {
+  const payload = value instanceof Date ? { d: value.toISOString() } : { v: value }
+  return Buffer.from(JSON.stringify(payload)).toString('base64url')
+}
+
+export function decodeCursor(cursor: string): unknown {
+  try {
+    const payload = JSON.parse(Buffer.from(cursor, 'base64url').toString()) as { v?: unknown; d?: string }
+    return payload.d !== undefined ? new Date(payload.d) : payload.v
+  } catch {
+    throw new Error('That cursor is not valid. Cursors come from a previous page and are not hand-written.')
   }
 }
 
@@ -612,6 +774,30 @@ export class Manager<M extends AnyModel> {
 
   prefetch<const Spec extends PrefetchMap>(spec: Spec) {
     return this.all().prefetch(spec)
+  }
+
+  groupBy<K extends keyof RowOf<M> & string, S extends Record<string, AggregateSpec<M>>>(field: K | K[], spec: S) {
+    return this.all().groupBy(field, spec)
+  }
+
+  aggregate<S extends Record<string, AggregateSpec<M>>>(spec: S) {
+    return this.all().aggregate(spec)
+  }
+
+  values<K extends keyof RowOf<M> & string>(...fields: K[]) {
+    return this.all().values(...fields)
+  }
+
+  limit(value: number) {
+    return this.all().limit(value)
+  }
+
+  page(options?: CursorPageOptions) {
+    return this.all().page(options)
+  }
+
+  query() {
+    return this.all().query()
   }
 
   get(...conditions: Condition<M>[]): Promise<RowOf<M>> {

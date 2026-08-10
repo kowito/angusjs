@@ -177,6 +177,21 @@ exact  iexact  ne  in  notIn  isnull  contains  icontains  startswith
 istartswith  endswith  iendswith  gt  gte  lt  lte  range
 ```
 
+Mixins are plain objects, so what lands on the table stays visible:
+
+```ts
+fields: { ...timestamps(), ...softDelete(), title: f.char({ maxLength: 200 }) }
+```
+
+`softDelete()` adds `deletedAt` and the `alive()` / `deleted()` / `softRemove()` / `restore()` helpers. It deliberately **does not** reinterpret `delete()` — a developer reading `Post.objects.filter(...).delete()` should be able to tell what it does.
+
+```ts
+await Post.objects.groupBy('status', { total: 'count:id', views: 'sum:views' })
+await Post.objects.page({ size: 25, after: cursor })   // keyset, not offset
+```
+
+Cursor pagination costs one query per page and doesn't shift under concurrent writes, which offset pagination does — a reader paging forward can otherwise see the same row twice.
+
 An `id` primary key is added when you don't declare one; table names are pluralised snake_case; foreign keys store `<attr>_id` and are indexed automatically.
 
 ### Serializers
@@ -551,7 +566,7 @@ database: { dialect: 'postgres', url: process.env.DATABASE_URL! }
 
 Angus does not implement a migration engine — [drizzle-kit](https://orm.drizzle.team/kit-docs/overview) already diffs a schema against its history and emits SQL. `makemigrations` generates `.angus/schema.ts` from your models and hands over, leaving reviewable SQL in `migrations/`.
 
-MySQL isn't supported: Drizzle's MySQL driver has no `RETURNING`, which the write path depends on.
+**MySQL is not supported, and that is settled rather than pending.** Every write uses `RETURNING`, so `create()` and `update()` return the row as the database actually stored it — defaults and triggers included. Drizzle's MySQL driver has none, and the follow-up `SELECT` that would stand in is not equivalent: an extra round trip, not atomic with the write, and under concurrent updates it can hand back another transaction's version of the row. Owning two write paths with different consistency guarantees is worse than one missing dialect.
 
 ---
 
