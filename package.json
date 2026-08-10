@@ -27,12 +27,14 @@
     "./client": "./src/client/index.ts",
     "./mcp": "./src/mcp/index.ts",
     "./realtime": "./src/realtime/index.ts",
+    "./tracing": "./src/tracing.ts",
     "./testing": "./src/testing/index.ts",
     "./http": "./src/http/index.ts",
     "./env": "./src/core/env.ts"
   },
   "files": [
     "src",
+    "!src/**/*.test.ts",
     "README.md",
     "ARCHITECTURE.md",
     "ROADMAP.md",
@@ -40,7 +42,8 @@
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "bun test"
+    "test": "bun test",
+    "prepublishOnly": "bun run typecheck && bun test"
   },
   "keywords": [
     "elysia",
