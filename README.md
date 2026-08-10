@@ -123,7 +123,7 @@ Lifecycle hooks, guards, decorators and plugins apply to Angus routes exactly as
 | OpenAPI | Named component schemas | ✅ |
 | Admin | Tables, filters, forms, widgets | ✅ |
 | MCP | Tool input and output schemas | ✅ |
-| Typed client | End-to-end typed fetch client | Planned |
+| Typed client | End-to-end typed fetch client | ✅ |
 
 Beyond the model, an **application service** declares a non-CRUD operation once and is read by REST, OpenAPI, MCP and the CLI the same way.
 
@@ -244,6 +244,30 @@ router().post('/invoices/:invoiceId/approve', fromService(approveInvoice, {
 ```
 
 Mounting is the only adapter needed: OpenAPI and MCP already read the route table, so the service becomes a documented endpoint *and* an agent tool with no second registration. It's also `angus run approve-invoice --invoiceId 3`.
+
+### Typed client
+
+```bash
+angus client --out ../web/src/api.ts
+```
+
+```ts
+import { createClient, ApiError } from './api'
+
+const api = createClient({ baseUrl: 'https://api.example.com' })
+
+const posts = await api.postList({ query: { search: 'bun', pageSize: 10 } })
+const post = await api.postDetail({ params: { id: 3 } })
+await api.postPartialUpdate({ params: { id: 3 }, body: { title: 'Renamed' } })
+```
+
+Generated from the same route definitions as the OpenAPI document, so the client cannot describe an endpoint the server doesn't have. The file is **self-contained** — its own types, error class and fetch wrapper, importing nothing — because a frontend shouldn't have to install the backend framework to call it.
+
+Failures throw `ApiError` carrying the error contract: `status`, a stable `code`, `detail`, and field-level `errors`.
+
+> `baseUrl` is the origin alone. Generated paths already include your project prefix, so passing `https://host/api` would produce `/api/api/...`.
+
+**Why not [Eden](https://elysiajs.com/eden/overview.html)?** Eden imports the server's *type*, which needs the client to compile against the server's source — fine in a monorepo, impossible across repos. More decisively, Angus mounts routes as data (which is what makes `angus routes`, OpenAPI and MCP possible), and that erases the per-route types Eden reads.
 
 ### Transactions
 
@@ -421,6 +445,7 @@ Both commands are configuration-only — no server, no database writes — so th
 | `angus models` | Print every model and its columns |
 | `angus check [--deploy]` | Validate the project; `--deploy` audits production settings |
 | `angus openapi [--out]` | Print or write the OpenAPI document |
+| `angus client [--out]` | Generate a typed API client |
 | `angus mcp [--list]` | Serve the API to agents over MCP |
 | `angus run <service>` | Invoke an application service |
 | `angus shell` | REPL with your models in scope |

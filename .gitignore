@@ -4,3 +4,5 @@ node_modules/
 *.sqlite-shm
 *.sqlite-wal
 .env
+generated-live.ts
+.client-check/

@@ -20,5 +20,7 @@
       "angusjs/*": ["./src/*/index.ts"]
     }
   },
-  "include": ["src", "examples"]
+  "include": ["src", "examples"],
+  // Written by the client tests at runtime; not part of the package.
+  "exclude": ["src/client/generated-live.ts", ".client-check"]
 }

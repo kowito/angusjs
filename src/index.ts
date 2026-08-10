@@ -94,6 +94,10 @@ export type { AdminSiteOptions, ModelAdminOptions } from './admin/index.ts'
 export { generateOpenApi, renderDocs } from './openapi/index.ts'
 export type { OpenApiDocument, OpenApiOptions } from './openapi/index.ts'
 
+// Typed client generation
+export { generateClient } from './client/generate.ts'
+export type { ClientGenerateOptions } from './client/generate.ts'
+
 // MCP
 export { buildTools, callTool, dispatch, serveStdio, SUPPORTED_VERSIONS } from './mcp/index.ts'
 export type { DispatchContext, ServerIdentity, Tool, ToolDefinition } from './mcp/index.ts'

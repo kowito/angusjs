@@ -10,6 +10,7 @@ import { loadProject, type LoadedProject } from '../core/config.ts'
 import { runServer } from '../core/project.ts'
 import { resolveSettings } from '../core/settings.ts'
 import { check, models, openapi, routes, shell } from './commands/inspect.ts'
+import { client as clientCommand } from './commands/client.ts'
 import { mcp as mcpCommand } from './commands/mcp.ts'
 import { run as runCommand } from './commands/run.ts'
 import { makemigrations, migrate } from './commands/migrations.ts'
@@ -65,6 +66,11 @@ const COMMANDS: Record<string, Command> = {
     summary: 'Print the OpenAPI document',
     usage: 'angus openapi [--out openapi.json] [--compact]',
     run: ({ project, args }) => openapi(project!, args),
+  },
+  client: {
+    summary: 'Generate a typed API client',
+    usage: 'angus client [--out ../web/src/api.ts] [--name createClient] [--base-url https://api.example.com]',
+    run: ({ project, args }) => clientCommand(project!, args),
   },
   mcp: {
     summary: 'Serve the API to agents over MCP (stdio)',

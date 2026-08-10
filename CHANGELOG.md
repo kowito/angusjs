@@ -5,6 +5,26 @@ contain breaking changes; those are listed first in each entry.
 
 ## Unreleased
 
+### Added — typed client
+
+**`angus client`** generates a typed fetch client from the same route
+definitions that produce the OpenAPI document, so it cannot describe an endpoint
+the server does not have.
+
+The output is self-contained — its own interfaces, error class and fetch wrapper,
+importing nothing — because a frontend should not have to install the backend
+framework to call the API. Failures throw `ApiError` carrying the error
+contract's `status`, `code`, `detail` and field-level `errors`.
+
+Eden was investigated first, per the governing rule. It imports the server's
+*type*, which needs the client to compile against the server's source — fine in a
+monorepo, impossible across repos — and it cannot see Angus routes at all,
+because mounting them as data is exactly what erases the per-route types Eden
+reads.
+
+Component names that would clash with the generated runtime (`Error`,
+`Response`, `ClientOptions`) are renamed rather than left to shadow it.
+
 ### Added — relations
 
 **`prefetch()`** for reverse relations. `selectRelated` joins the many-to-one
