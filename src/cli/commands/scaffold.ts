@@ -344,16 +344,62 @@ export default defineApp({
   )
 
   success(`Created app ${bold(name)} in apps/${name}/`)
+
+  const installed = await installApp(project.root, name)
+  if (installed) {
+    info(dim(`  installed in angus.config.ts`))
+  } else {
+    info('')
+    info(`Could not edit ${cyan('angus.config.ts')} — add it yourself:`)
+    info('')
+    info(dim(`  import ${name} from './apps/${name}/app.ts'`))
+    info(dim(`    apps: [admin.app(), ${name}],`))
+  }
+
   info('')
-  info(`Now register it in ${cyan('angus.config.ts')}:`)
-  info('')
-  info(dim(`  import ${name} from './apps/${name}/app.ts'`))
-  info(dim('  export default defineSettings({'))
-  info(dim(`    apps: [admin.app(), ${name}],`))
-  info(dim('    ...'))
-  info(dim('  })'))
-  info('')
-  info(`Then ${cyan('angus makemigrations')} and ${cyan('angus migrate')}.`)
+  info(`Next: ${cyan('angus makemigrations')} and ${cyan('angus migrate')}.`)
   info(dim(`Its models are already registered with the admin at /admin.`))
   return 0
+}
+
+/**
+ * Adds the app to `apps` in the project settings.
+ *
+ * An app that exists on disk but is not installed produces nothing: no tables,
+ * no routes, and — worse — no complaint. `angus check` reports a clean project
+ * because from its point of view there is nothing there. The generator already
+ * registers models with their app for the same reason; this is the same failure
+ * one level up.
+ */
+async function installApp(root: string, name: string): Promise<boolean> {
+  const path = resolve(root, 'angus.config.ts')
+  const file = Bun.file(path)
+  if (!(await file.exists())) return false
+
+  const source = await file.text()
+  const apps = /apps:\s*\[([^\]]*)\]/.exec(source)
+  if (!apps) return false
+
+  const current = apps[1]!.split(',').map((entry) => entry.trim()).filter(Boolean)
+  // Already there — running startapp twice must not install it twice.
+  if (current.includes(name)) return true
+
+  // Before admin.app(), so the app's own routes are mounted first and the
+  // admin sees its models by the time it builds.
+  const merged = [name, ...current].join(', ')
+
+  let updated = source.replace(apps[0]!, `apps: [${merged}]`)
+
+  if (!new RegExp(`^import ${name} from`, 'm').test(updated)) {
+    const lastImport = [...updated.matchAll(/^import .*$/gm)].pop()
+    const line = `import ${name} from './apps/${name}/app.ts'`
+    updated = lastImport
+      ? updated.slice(0, lastImport.index! + lastImport[0].length) +
+        `\n${line}` +
+        updated.slice(lastImport.index! + lastImport[0].length)
+      : `${line}\n${updated}`
+  }
+
+  await Bun.write(path, updated)
+  return true
 }

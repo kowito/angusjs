@@ -5,6 +5,21 @@ contain breaking changes; those are listed first in each entry.
 
 ## Unreleased
 
+### Fixed — `startapp` now installs the app it creates
+
+An app scaffolded by `startapp` was created on disk but never added to `apps`
+in the settings, leaving the developer to do it from printed instructions. Skip
+that step and the app produces nothing — no tables, no routes — and `angus
+check` reports a clean project, because from its point of view there is nothing
+there.
+
+`generate crud` already registers models with their app for exactly this
+reason. This is the same failure one level up, and it is now handled the same
+way.
+
+The CI smoke test asserted only that `check` passed, which it did throughout.
+It now asserts the models actually arrived.
+
 ### Added — documentation site
 
 Thirteen pages in `docs/`, building to a static site with

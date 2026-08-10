@@ -35,7 +35,17 @@ jobs:
           bun install
           bun "$GITHUB_WORKSPACE/src/cli/index.ts" startapp thing
           bun "$GITHUB_WORKSPACE/src/cli/index.ts" generate crud thing Widget name:string price:int
-          bun "$GITHUB_WORKSPACE/src/cli/index.ts" check
+
+          # `check` passing is not enough on its own: an app that exists on disk
+          # but was never installed reports a perfectly clean project, because
+          # from `check`'s point of view there is nothing there. Assert that the
+          # models and routes actually arrived.
+          bun "$GITHUB_WORKSPACE/src/cli/index.ts" check | tee check.txt
+          grep -q "2 model(s)" check.txt || { echo "app or model not registered"; exit 1; }
+
+          bun "$GITHUB_WORKSPACE/src/cli/index.ts" makemigrations
+          bun "$GITHUB_WORKSPACE/src/cli/index.ts" migrate
+
           # The generator appends code and imports to files it did not write, so
           # what matters is that the project still compiles afterwards.
           bunx tsc --noEmit
