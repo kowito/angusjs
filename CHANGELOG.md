@@ -5,6 +5,18 @@ contain breaking changes; those are listed first in each entry.
 
 ## Unreleased
 
+### Fixed — constraint violations are no longer 500s
+
+A duplicate value, or a foreign key pointing at a row that does not exist, was
+reported as `500 ServerError` with the driver's message and a stack trace. Both
+are caused by the submitted data, so they belong to the caller: they are now
+`409 Conflict` and `400 Bad Request`, with the offending column named under
+`errors` so a form can put the message beside the input.
+
+This also stops constraint failures from burying real 500s in the logs. The
+admin now shares the same classifier rather than keeping its own copy of the
+driver patterns.
+
 ### Added — generators and seeding
 
 `angus generate crud <app> <Name> [field:type ...]` scaffolds a model,

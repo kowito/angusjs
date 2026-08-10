@@ -10,7 +10,7 @@
  */
 
 import { Elysia } from 'elysia'
-import { DoesNotExist, MultipleObjectsReturned } from '../db/errors.ts'
+import { classifyIntegrityError, constraintField, DoesNotExist, MultipleObjectsReturned } from '../db/errors.ts'
 import { APIError, NotFound, ServerError, type ErrorBody } from '../http/errors.ts'
 import { ValidationError } from '../serializers/index.ts'
 
@@ -61,6 +61,14 @@ export function codeForStatus(status: number): ErrorCode {
   }
 }
 
+/** Wording aimed at whoever submitted the request, not at whoever wrote the schema. */
+const INTEGRITY_MESSAGES: Record<string, string> = {
+  unique: 'That value is already taken.',
+  'foreign-key': 'That related record does not exist.',
+  'not-null': 'A required value was missing.',
+  check: 'That value is not allowed.',
+}
+
 export interface ErrorTranslationOptions {
   debug?: boolean
 }
@@ -104,6 +112,22 @@ export function errorTranslation(options: ErrorTranslationOptions = {}): Elysia<
         detail: 'Validation failed.',
         code: ERROR_CODES.validation,
         errors: error.errors,
+      }
+    }
+
+    // A constraint violation is caused by the submitted data, so it is the
+    // caller's to fix. Reporting it as 500 misleads them and buries real 500s.
+    const integrity = classifyIntegrityError(error)
+    if (integrity) {
+      const field = constraintField(error)
+      const detail = INTEGRITY_MESSAGES[integrity]
+      set.status = integrity === 'unique' ? 409 : 400
+
+      return {
+        error: integrity === 'unique' ? 'Conflict' : 'BadRequest',
+        detail,
+        code: integrity === 'unique' ? ERROR_CODES.conflict : ERROR_CODES.badRequest,
+        ...(field ? { errors: { [field]: [detail] } } : {}),
       }
     }
 

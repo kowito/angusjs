@@ -44,4 +44,4 @@ export type { Connection, DatabaseConfig } from './connection.ts'
 export { buildSchemaExports, buildTables } from './schema.ts'
 export type { Dialect, TableMap } from './schema.ts'
 
-export { DoesNotExist, IntegrityError, MultipleObjectsReturned } from './errors.ts'
+export { classifyIntegrityError, constraintField, DoesNotExist, IntegrityError, MultipleObjectsReturned } from './errors.ts'

@@ -7,6 +7,7 @@
  */
 
 import { defineApp, type AngusApp } from '../core/app.ts'
+import { classifyIntegrityError } from '../db/errors.ts'
 import { Q } from '../db/lookups.ts'
 import type { AnyModel, FieldMap } from '../db/model.ts'
 import { PermissionDenied } from '../http/errors.ts'
@@ -752,19 +753,23 @@ export class AdminSite {
   }
 }
 
-/** Turns a driver error into something an admin user can act on. */
+/**
+ * Turns a driver error into something an admin user can act on, using the same
+ * classifier the API error contract uses so the two cannot drift apart.
+ */
 function describeWriteError(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error)
-  if (/UNIQUE constraint failed|duplicate key/i.test(message)) {
-    return 'That value must be unique, and another row already uses it.'
+  switch (classifyIntegrityError(error)) {
+    case 'unique':
+      return 'That value must be unique, and another row already uses it.'
+    case 'foreign-key':
+      return 'That related row does not exist.'
+    case 'not-null':
+      return 'A required field was left empty.'
+    case 'check':
+      return 'That value is not allowed.'
+    default:
+      return error instanceof Error ? error.message : String(error)
   }
-  if (/FOREIGN KEY constraint failed|violates foreign key/i.test(message)) {
-    return 'That related row does not exist.'
-  }
-  if (/NOT NULL constraint failed|null value in column/i.test(message)) {
-    return 'A required field was left empty.'
-  }
-  return message
 }
 
 export function adminSite(options?: AdminSiteOptions): AdminSite {
