@@ -34,4 +34,8 @@ jobs:
           sed -i 's|"angusjs": "\^0.1.0"|"angusjs": "link:angusjs"|' package.json
           bun install
           bun "$GITHUB_WORKSPACE/src/cli/index.ts" startapp thing
+          bun "$GITHUB_WORKSPACE/src/cli/index.ts" generate crud thing Widget name:string price:int
           bun "$GITHUB_WORKSPACE/src/cli/index.ts" check
+          # The generator appends code and imports to files it did not write, so
+          # what matters is that the project still compiles afterwards.
+          bunx tsc --noEmit
