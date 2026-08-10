@@ -282,6 +282,30 @@ Ambient, so a query several frames deep — inside a service, inside a model hoo
 
 `F()` refers to a column's own value, so `update({ views: F('views').add(1) })` becomes `SET views = views + 1` and concurrent increments don't lose each other.
 
+### Background jobs
+
+```ts
+export const sendReceipt = job({
+  name: 'send-receipt',
+  input: t.Object({ orderId: t.Numeric() }),
+  async handler({ input, attempt }) { /* ... */ },
+})
+
+await enqueue(sendReceipt, { orderId: order.id }, { delaySeconds: 30 })
+schedule({ name: 'nightly-digest', job: sendDigest, every: '1d' })
+```
+
+```bash
+angus worker --concurrency 4      # run jobs
+angus worker --list --stats       # inspect
+```
+
+The queue is a table in your own database, not Redis. That buys the property that matters most: **enqueueing joins the caller's transaction**, so a job can't outlive the write that scheduled it — the race a separate broker cannot avoid. It also means one less service to run. The cost is throughput: polling a table suits emails, webhooks and thumbnails, not a firehose. `startWorker` and the storage are separable, so a Redis-backed queue can replace it later.
+
+Retries use exponential backoff, a stalled worker's jobs are reclaimed when their lease expires, and `uniqueKey` stops a second copy being queued. Schedules derive a per-slot key, so running several workers still sends one digest.
+
+> **Delivery is at-least-once.** A worker can succeed and die before recording it, so handlers must be idempotent. `uniqueKey` prevents duplicate *enqueues*, not duplicate *runs* — exactly-once needs a transactional consumer, which nothing here can honestly offer.
+
 ### Email
 
 ```ts
@@ -469,6 +493,7 @@ Both commands are configuration-only — no server, no database writes — so th
 | `angus client [--out]` | Generate a typed API client |
 | `angus mcp [--list]` | Serve the API to agents over MCP |
 | `angus run <service>` | Invoke an application service |
+| `angus worker` | Run background jobs |
 | `angus shell` | REPL with your models in scope |
 
 ---

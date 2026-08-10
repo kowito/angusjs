@@ -86,6 +86,27 @@ export type { AngusPluginOptions, McpPluginOptions } from './plugin.ts'
 export { errorTranslation, ERROR_CODES, codeForStatus } from './core/errors.ts'
 export type { ErrorCode } from './core/errors.ts'
 
+// Background jobs
+export {
+  cancelJob,
+  claimJob,
+  enqueue,
+  getJob,
+  job,
+  Job,
+  jobModels,
+  pruneJobs,
+  queueStats,
+  registeredJobs,
+  retryJob,
+  runJob,
+  runOnce,
+  runSchedules,
+  schedule,
+  startWorker,
+} from './jobs/index.ts'
+export type { EnqueueOptions, JobDefinition, JobRow, QueueStats, RunResult, Worker, WorkerOptions } from './jobs/index.ts'
+
 // Email
 export {
   consoleBackend,

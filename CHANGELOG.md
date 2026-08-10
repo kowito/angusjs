@@ -5,6 +5,26 @@ contain breaking changes; those are listed first in each entry.
 
 ## Unreleased
 
+### Added — background jobs
+
+`job()`, `enqueue()`, `schedule()`, `startWorker()` and `angus worker`.
+
+The queue is a table in the project's own database rather than Redis, which
+buys the property that matters most: **enqueueing joins the caller's
+transaction**, so a job cannot outlive a rolled-back write. That race is
+unavoidable with a separate broker and is the most common source of phantom
+jobs. The cost is throughput — polling suits emails, webhooks and thumbnails,
+not a firehose — and the storage is separable so a Redis queue can replace it.
+
+Retries use exponential backoff; a stalled worker's jobs are reclaimed when
+their lease expires; `uniqueKey` prevents a second pending copy; and a job whose
+code has been deleted fails immediately rather than spinning. Schedules use
+intervals rather than cron, and derive a per-slot deduplication key so several
+workers still enqueue once.
+
+Delivery is at-least-once and documented as such: a worker can succeed and die
+before recording it, so handlers must be idempotent.
+
 ### Added — email
 
 Four backends: `consoleBackend()` (stderr, the default), `memoryBackend()` (an

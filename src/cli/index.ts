@@ -13,6 +13,7 @@ import { check, models, openapi, routes, shell } from './commands/inspect.ts'
 import { client as clientCommand } from './commands/client.ts'
 import { mcp as mcpCommand } from './commands/mcp.ts'
 import { run as runCommand } from './commands/run.ts'
+import { worker as workerCommand } from './commands/worker.ts'
 import { makemigrations, migrate } from './commands/migrations.ts'
 import { startapp, startproject } from './commands/scaffold.ts'
 import { bold, cyan, dim, fail, green, info } from './ui.ts'
@@ -86,6 +87,11 @@ const COMMANDS: Record<string, Command> = {
     summary: 'Invoke an application service',
     usage: "angus run <service> [--key value] [--json '{...}'] [--list]",
     run: ({ project, args }) => runCommand(project!, args),
+  },
+  worker: {
+    summary: 'Run background jobs',
+    usage: 'angus worker [--concurrency 4] [--once] [--list] [--stats] [--prune --days 7]',
+    run: ({ project, args }) => workerCommand(project!, args),
   },
   shell: {
     summary: 'Open a REPL with your models loaded',
