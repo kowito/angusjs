@@ -19,13 +19,13 @@ describe('bounded memory cache', () => {
     store.set('a', 1, 60)
     store.set('b', 2, 60)
     store.set('c', 3, 60)
-    store.get('a') // touch a — now b is the least-recently-used
+    store.get<number>('a') // touch a — now b is the least-recently-used
     store.set('d', 4, 60) // over cap -> evict b
 
-    expect(store.get('a')).toBe(1)
-    expect(store.get('b')).toBeUndefined()
-    expect(store.get('c')).toBe(3)
-    expect(store.get('d')).toBe(4)
+    expect(store.get<number>('a')).toBe(1)
+    expect(store.get<number>('b')).toBeUndefined()
+    expect(store.get<number>('c')).toBe(3)
+    expect(store.get<number>('d')).toBe(4)
   })
 
   test('eviction keeps the tag index consistent', () => {
@@ -35,6 +35,6 @@ describe('bounded memory cache', () => {
     store.set('c', 3, 60, ['t']) // evicts a
     // Invalidating the tag must not throw on the evicted key and clears the rest.
     expect(store.invalidateTags(['t'])).toBe(2)
-    expect(store.get('b')).toBeUndefined()
+    expect(store.get<number>('b')).toBeUndefined()
   })
 })
