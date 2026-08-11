@@ -12,7 +12,7 @@
  * with spam filters.
  */
 
-import { esc } from '../html.ts'
+import { esc, safeUrl } from '../html.ts'
 
 export interface TemplateContext {
   /** Product name, shown in the header and signature. */
@@ -54,12 +54,12 @@ export function renderEmail(options: LayoutOptions): { html: string; text: strin
     .join('\n      ')
 
   const action = options.action
-    ? `<p style="margin:22px 0"><a href="${esc(options.action.url)}" style="${BUTTON_STYLE}">${esc(
+    ? `<p style="margin:22px 0"><a href="${esc(safeUrl(options.action.url))}" style="${BUTTON_STYLE}">${esc(
         options.action.label,
       )}</a></p>
       <p style="margin:0 0 14px;color:#5f7168;font-size:13px;line-height:1.6">
         If the button doesn't work, copy this link:<br>
-        <a href="${esc(options.action.url)}" style="color:#1c6a4a;word-break:break-all">${esc(options.action.url)}</a>
+        <a href="${esc(safeUrl(options.action.url))}" style="color:#1c6a4a;word-break:break-all">${esc(options.action.url)}</a>
       </p>`
     : ''
 

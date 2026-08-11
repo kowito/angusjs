@@ -5,6 +5,26 @@ contain breaking changes; those are listed first in each entry.
 
 ## Unreleased
 
+### Fixed — stored XSS through URL fields in the admin (security)
+
+A `url` field value rendered into an `<a href>` in the admin was HTML-escaped
+but not scheme-checked, and `javascript:alert(document.cookie)` has no
+HTML-special characters — so it passed through escaping untouched and executed
+when a staff user clicked the link. Because a URL field is caller-supplied (a
+profile link, a webhook target), a lower-privileged user could store one that
+fires in an admin's authenticated session: stored XSS escalating to admin
+account takeover.
+
+Found in a security scan of the whole project. Write-time validation did not
+catch it either — `javascript:`, `data:` and `vbscript:` all pass the `uri`
+format check.
+
+`safeUrl()` now neutralises `javascript:`, `data:`, `vbscript:` and `file:`
+schemes wherever a value becomes an `href` — the admin URL widget and the email
+templates. The fix is on the sink, not the write path, because data reaches a
+column through bulk import, seeds and raw ORM writes that never touch a
+serializer. The visible link text is unchanged, so nothing is silently hidden.
+
 ### Changed — project layout
 
 Cross-cutting test suites moved from `src/` to `tests/`, so `src/` is library

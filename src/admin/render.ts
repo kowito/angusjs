@@ -6,7 +6,7 @@
  * developer tool heavier than the apps it inspects.
  */
 
-export { esc, html, Html, page, raw, seeOther } from '../html.ts'
+export { esc, html, Html, page, raw, safeUrl, seeOther } from '../html.ts'
 
 import { esc, html, raw, type Html } from '../html.ts'
 

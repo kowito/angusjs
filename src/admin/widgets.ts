@@ -8,7 +8,7 @@
 
 import type { FieldSpec } from '../db/fields.ts'
 import type { AnyModel, FieldMap } from '../db/model.ts'
-import { esc, html, raw, type Html } from './render.ts'
+import { esc, html, raw, safeUrl, type Html } from './render.ts'
 
 // ---------------------------------------------------------------------------
 // Display
@@ -59,7 +59,9 @@ export function displayValue(spec: FieldSpec, value: unknown): Html {
     case 'json':
       return html`<code>${JSON.stringify(value).slice(0, 80)}</code>`
     case 'url':
-      return html`<a href="${String(value)}" rel="noreferrer noopener">${String(value)}</a>`
+      // safeUrl neutralises javascript:/data: schemes, which HTML-escaping does
+      // not touch; the visible text stays the raw value so nothing is hidden.
+      return html`<a href="${safeUrl(value)}" rel="noreferrer noopener">${String(value)}</a>`
     case 'image':
     case 'file':
       // The column holds a key, which on its own tells a human nothing.

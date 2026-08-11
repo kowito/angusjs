@@ -49,6 +49,7 @@ These are deliberate, and documented so nobody has to reverse-engineer the inten
 | PKCE, `state` and `nonce` are mandatory, not optional | Each stops a specific attack and none costs anything. |
 | The JWT algorithm comes from the verifier, never the token header | The header is attacker-controlled. This is the classic JWT vulnerability. |
 | The admin refuses to serve in production without configured permissions | An admin that stayed open because nobody configured it is the failure worth designing against. |
+| URLs in admin links and emails are scheme-checked, not just HTML-escaped | `javascript:` has no HTML-special characters, so escaping alone lets it reach an `href` and run in a staff session. |
 | MCP deletes require explicit confirmation | An irreversible action should not happen on a single inference. |
 | Audit logs redact secret-looking keys and store a digest of the caller | A log outlives the credential in it, and is read by more people than the database. |
 

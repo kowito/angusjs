@@ -21,6 +21,34 @@ export function esc(value: unknown): string {
   return String(value).replace(/[&<>"']/g, (char) => ESCAPES[char]!)
 }
 
+/**
+ * Schemes that execute script or smuggle a document, and so must never reach an
+ * `href`. `data:` is included because `data:text/html,<script>…` runs in the
+ * page's origin, which for the admin is an authenticated staff session.
+ */
+const DANGEROUS_SCHEME = /^\s*(javascript|data|vbscript|file):/i
+
+/**
+ * Makes a value safe to place in an `href`.
+ *
+ * HTML-escaping is not enough here: `javascript:alert(document.cookie)` has no
+ * HTML-special characters, so it survives `esc()` untouched and runs the moment
+ * a staff user clicks the link. A URL field is caller-supplied — a profile
+ * link, a webhook target — so a lower-privileged user can store one that fires
+ * in an admin's session, which is admin account takeover, not merely defacement.
+ *
+ * The check is on the sink rather than the write path on purpose: data reaches
+ * a column through bulk import, seeds and raw ORM writes that never touch a
+ * serializer, so validating on the way in would leave those routes open.
+ * Anything not clearly a safe link becomes `#`.
+ */
+export function safeUrl(value: unknown): string {
+  if (value === null || value === undefined) return '#'
+  const url = String(value).trim()
+  if (url === '' || DANGEROUS_SCHEME.test(url)) return '#'
+  return url
+}
+
 /** Marks a string as already-safe HTML so `html` won't escape it again. */
 export class Html {
   constructor(readonly value: string) {}

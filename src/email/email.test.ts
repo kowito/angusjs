@@ -242,6 +242,17 @@ describe('templates', () => {
     expect(rendered.html).not.toContain('<script>alert(1)</script>')
   })
 
+  test('a javascript: action URL is defused, not just escaped', () => {
+    // Webmail renders these in a browser, so the scheme matters even in email.
+    const rendered = renderEmail({
+      title: 'Hi',
+      body: ['x'],
+      action: { label: 'Go', url: 'javascript:alert(1)' },
+    })
+    expect(rendered.html).not.toContain('href="javascript:')
+    expect(rendered.html).toContain('href="#"')
+  })
+
   test('a URL with a quote cannot break out of the href', () => {
     const rendered = renderEmail({
       title: 'Hi',
