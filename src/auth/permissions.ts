@@ -44,14 +44,27 @@ export const isSuperuser: Permission = (context) => Boolean(userOf(context)?.isS
 export const isEmailVerified: Permission = (context) => Boolean(userOf(context)?.emailVerifiedAt)
 
 /** Requires one of the named roles. A superuser always passes. */
+/**
+ * Names a permission function so a denial can say which one refused.
+ *
+ * A factory like `hasRole('editor')` returns a fresh closure whose `.name` is
+ * empty, so a 403 from it would read "denied by ``" — useless. Naming it
+ * `hasRole(editor)` makes the development diagnostic and the server log point
+ * at the actual gate. Purely for diagnostics; it changes no behaviour.
+ */
+function named(name: string, permission: Permission): Permission {
+  Object.defineProperty(permission, 'name', { value: name, configurable: true })
+  return permission
+}
+
 export function hasRole(...roles: string[]): Permission {
-  return (context) => {
+  return named(`hasRole(${roles.join(', ')})`, (context) => {
     const user = userOf(context)
     if (!user) return false
     if (user.isSuperuser) return true
     const owned = new Set(user.roles ?? [])
     return roles.some((role) => owned.has(role))
-  }
+  })
 }
 
 /**
@@ -62,12 +75,12 @@ export function hasRole(...roles: string[]): Permission {
  * could. Credentials with no scopes are unrestricted.
  */
 export function hasScope(...required: string[]): Permission {
-  return (context) => {
+  return named(`hasScope(${required.join(', ')})`, (context) => {
     const identity = identityOf(context)
     if (!identity) return false
     if (identity.scopes.length === 0) return true
     return required.every((scope) => identity.scopes.includes(scope))
-  }
+  })
 }
 
 /**
@@ -76,13 +89,13 @@ export function hasScope(...required: string[]): Permission {
  * `isOwner('userId')` compares `params.userId` to the signed-in user's id.
  */
 export function isOwner(param = 'userId'): Permission {
-  return (context) => {
+  return named(`isOwner(${param})`, (context) => {
     const user = userOf(context)
     if (!user) return false
     if (user.isSuperuser) return true
     const value = (context.params as Record<string, unknown> | undefined)?.[param]
     return value !== undefined && String(value) === String(user.id)
-  }
+  })
 }
 
 /** Anonymous callers may read; writes require a signed-in user. */
@@ -93,18 +106,20 @@ export const readOnlyOrAuthenticated: Permission = (context) => {
 
 /** Passes when every one of `permissions` passes. */
 export function all(...permissions: Permission[]): Permission {
-  return async (context) => {
+  const label = `all(${permissions.map((p) => p.name || '?').join(', ')})`
+  return named(label, async (context) => {
     for (const permission of permissions) if (!(await permission(context))) return false
     return true
-  }
+  })
 }
 
 /** Passes when any one of `permissions` passes. */
 export function any(...permissions: Permission[]): Permission {
-  return async (context) => {
+  const label = `any(${permissions.map((p) => p.name || '?').join(', ')})`
+  return named(label, async (context) => {
     for (const permission of permissions) if (await permission(context)) return true
     return false
-  }
+  })
 }
 
 // ---------------------------------------------------------------------------

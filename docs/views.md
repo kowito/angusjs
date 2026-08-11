@@ -66,6 +66,11 @@ actionPermissions: { destroy: [isStaff] }
 
 Built in: `allowAny`, `isAuthenticated`, `isStaff`, `isSuperuser`, `isActive`, `isEmailVerified`, `readOnlyOrAuthenticated`, `hasRole(...)`, `hasScope(...)`, and the combinators `not()` and `either()`.
 
+When a permission refuses, the server logs which one, and in `debug` mode the
+403 body carries a `deniedBy` field naming the gate — so "why is this 403?" has
+an answer without adding print statements. Production never includes it: the
+name of the gate is a hint to whoever is probing it.
+
 ## Object-level permissions
 
 A permission runs before anything is fetched, so it can only ask about the caller. Some rules are about the row.

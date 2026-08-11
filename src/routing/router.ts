@@ -160,7 +160,13 @@ export class Router {
             throw error
           }
           if (!allowed) {
-            throw context.user ? new PermissionDenied() : new Unauthorized()
+            // The permission that refused is right here; naming it turns an
+            // opaque 403 into "isStaff denied this" during development. A
+            // production body never sees it — that name is a map of the gate.
+            const deniedBy = permission.name || undefined
+            throw context.user
+              ? new PermissionDenied(undefined, deniedBy)
+              : new Unauthorized(undefined, deniedBy)
           }
         }
         return route.handler(context)

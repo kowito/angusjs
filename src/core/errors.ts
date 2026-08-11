@@ -90,6 +90,17 @@ export function errorTranslation(options: ErrorTranslationOptions = {}): Elysia<
     if (error instanceof APIError) {
       set.status = error.status
       const body = error.toBody()
+
+      // A permission refusal knows which gate closed. The operator always wants
+      // that in the logs; a developer wants it in the response; production must
+      // not leak it, because the name of the gate is a hint to whoever is
+      // probing it. So: logged always, in the body only under debug.
+      const deniedBy = (error as { deniedBy?: string }).deniedBy
+      if (deniedBy) {
+        console.error(`[angus] ${error.name} on ${set.status}: denied by \`${deniedBy}\``)
+        if (debug) return { ...body, code: normaliseCode(error, body), deniedBy }
+      }
+
       return { ...body, code: normaliseCode(error, body) }
     }
 

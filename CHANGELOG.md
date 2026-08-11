@@ -5,6 +5,20 @@ contain breaking changes; those are listed first in each entry.
 
 ## Unreleased
 
+### Added — permission denials name the gate (in development)
+
+A 403 knew exactly which permission refused and threw it away. Now it keeps it:
+the server logs which gate closed, and in `debug` mode the response body carries
+a `deniedBy` field — `isStaff`, `hasRole(editor, admin)`, and so on. "Why is
+this forbidden?" stops being a print-statement hunt.
+
+Production never includes it. The name of a gate is a hint to whoever is probing
+it, so the split is deliberate: operator and developer learn which permission
+refused, an anonymous client does not. Factory permissions (`hasRole`,
+`hasScope`, `isOwner`) and the `all`/`any` combinators name themselves for this,
+and a bare anonymous permission is reported as no name rather than a misleading
+blank.
+
 ### Added — a route-aware test client
 
 `TestResponse.expect(status)` returns the body when the status matches and

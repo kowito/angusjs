@@ -41,14 +41,28 @@ export class BadRequest extends APIError {
 }
 
 export class Unauthorized extends APIError {
-  constructor(detail = 'Authentication credentials were not provided.') {
+  /**
+   * The permission that refused, if a named one did.
+   *
+   * Carried so the server can log it and a development response can show it,
+   * never so a production body can — telling an anonymous caller *which* gate
+   * stopped them maps out the authorization for an attacker.
+   */
+  readonly deniedBy?: string
+
+  constructor(detail = 'Authentication credentials were not provided.', deniedBy?: string) {
     super(401, detail)
+    this.deniedBy = deniedBy
   }
 }
 
 export class PermissionDenied extends APIError {
-  constructor(detail = 'You do not have permission to perform this action.') {
+  /** The permission that refused. See {@link Unauthorized.deniedBy}. */
+  readonly deniedBy?: string
+
+  constructor(detail = 'You do not have permission to perform this action.', deniedBy?: string) {
     super(403, detail)
+    this.deniedBy = deniedBy
   }
 }
 
