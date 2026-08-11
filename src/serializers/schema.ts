@@ -55,10 +55,13 @@ function baseSchema(spec: FieldSpec, mode: SchemaMode): TSchema {
       // serialises to `anyOf: [string, integer]`, which is right for input but
       // would make a client generated from the spec type the field
       // `string | number`. Writes keep the coercion so `"3"` from a form or
-      // query string is accepted rather than rejected.
+      // query string is accepted rather than rejected — but `multipleOf: 1`
+      // makes integer-ness an explicit constraint rather than relying on the
+      // coercing type's internals, so `2.5` is rejected on any dialect instead
+      // of being silently rounded (Postgres) or stored verbatim (SQLite).
       return mode === 'read'
         ? Type.Integer({ ...notes, minimum: spec.min, maximum: spec.max })
-        : t.Numeric({ ...notes, minimum: spec.min, maximum: spec.max })
+        : t.Numeric({ ...notes, minimum: spec.min, maximum: spec.max, multipleOf: 1 })
 
     case 'float':
       return mode === 'read'

@@ -195,6 +195,7 @@ interface SchemaLike {
   maximum?: number
   minLength?: number
   maxLength?: number
+  multipleOf?: number
   pattern?: string
   enum?: unknown[]
   const?: unknown
@@ -229,10 +230,15 @@ export function describeConstraint(schema: SchemaLike | undefined, fallback: str
   // Flatten a coercing union onto its wrapper, so `minimum` on either surfaces.
   const merged: SchemaLike = { ...schema }
   for (const member of schema.anyOf ?? []) {
-    for (const key of ['minimum', 'maximum', 'minLength', 'maxLength', 'format', 'pattern'] as const) {
+    for (const key of ['minimum', 'maximum', 'minLength', 'maxLength', 'multipleOf', 'format', 'pattern'] as const) {
       if (merged[key] === undefined && member[key] !== undefined) (merged as Record<string, unknown>)[key] = member[key]
     }
   }
+
+  // A whole-number constraint reads as its own sentence — and it is checked
+  // before the min/max bounds because "must be a whole number" is the more
+  // fundamental thing to say about `2.5`.
+  if (merged.multipleOf === 1) return 'must be a whole number'
 
   if (merged.format === 'email') return 'must be a valid email address'
   if (merged.format === 'uri') return 'must be a valid URL'
