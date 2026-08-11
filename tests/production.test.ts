@@ -5,17 +5,17 @@
 
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { Elysia, t } from 'elysia'
-import { defineApp } from './core/app.ts'
-import { deployChecks, hasBlockingFindings } from './core/deploy.ts'
-import { ConfigurationError, defineEnv, describeEnv, env } from './core/env.ts'
-import { createApp } from './core/project.ts'
-import { REQUEST_ID_HEADER } from './core/observability.ts'
-import { f } from './db/fields.ts'
-import { defineModel } from './db/model.ts'
-import { cors, csrf, securityHeaders } from './http/security.ts'
-import { MemoryThrottleStore, throttle } from './http/throttle.ts'
-import { router } from './routing/router.ts'
-import { clientFor, testDatabase, type TestClient, type TestDatabase } from './testing/index.ts'
+import { defineApp } from '../src/core/app.ts'
+import { deployChecks, hasBlockingFindings } from '../src/core/deploy.ts'
+import { ConfigurationError, defineEnv, describeEnv, env } from '../src/core/env.ts'
+import { createApp } from '../src/core/project.ts'
+import { REQUEST_ID_HEADER } from '../src/core/observability.ts'
+import { f } from '../src/db/fields.ts'
+import { defineModel } from '../src/db/model.ts'
+import { cors, csrf, securityHeaders } from '../src/http/security.ts'
+import { MemoryThrottleStore, throttle } from '../src/http/throttle.ts'
+import { router } from '../src/routing/router.ts'
+import { clientFor, testDatabase, type TestClient, type TestDatabase } from '../src/testing/index.ts'
 
 const Note = defineModel('prodNote', {
   fields: { body: f.char({ maxLength: 200 }) },
@@ -336,7 +336,7 @@ describe('deployment audit', () => {
   })
 
   test('flags an admin with no permissions', async () => {
-    const { adminSite } = await import('./admin/site.ts')
+    const { adminSite } = await import('../src/admin/site.ts')
     const site = adminSite({ path: '/audit-admin' })
     site.register(Note)
 
@@ -370,13 +370,13 @@ describe('deployment audit', () => {
   })
 
   test('flags the auth app installed without an authenticate hook', async () => {
-    const { authApp } = await import('./auth/app.ts')
+    const { authApp } = await import('../src/auth/app.ts')
     const findings = deployChecks({ ...settings, debug: false, apps: [notes, authApp()] })
     expect(findings.some((finding) => finding.id === 'auth-app-without-hook' && finding.severity === 'error')).toBe(true)
   })
 
   test('flags an email backend that silently does not send', async () => {
-    const { memoryBackend } = await import('./email/index.ts')
+    const { memoryBackend } = await import('../src/email/index.ts')
     const findings = deployChecks({
       ...settings,
       debug: false,

@@ -9,13 +9,13 @@
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { Elysia, t } from 'elysia'
-import { connect, disconnect, getConnection } from './db/connection.ts'
-import { DoesNotExist } from './db/errors.ts'
-import { f } from './db/fields.ts'
-import { defineModel } from './db/model.ts'
-import { router } from './routing/router.ts'
-import { modelViewSet } from './routing/viewset.ts'
-import { serializer } from './serializers/index.ts'
+import { connect, disconnect, getConnection } from '../src/db/connection.ts'
+import { DoesNotExist } from '../src/db/errors.ts'
+import { f } from '../src/db/fields.ts'
+import { defineModel } from '../src/db/model.ts'
+import { router } from '../src/routing/router.ts'
+import { modelViewSet } from '../src/routing/viewset.ts'
+import { serializer } from '../src/serializers/index.ts'
 
 const Widget = defineModel('widget', {
   fields: {
@@ -107,7 +107,7 @@ describe('dropping Angus into an Elysia app you already own', () => {
 
 describe('the plugin surface', () => {
   test('angus() installs error translation into an app you own', async () => {
-    const { angus, mount } = await import('./plugin.ts')
+    const { angus, mount } = await import('../src/plugin.ts')
 
     const app = new Elysia()
       .use(angus())
@@ -126,7 +126,7 @@ describe('the plugin surface', () => {
   })
 
   test('openapi() documents routers without a project', async () => {
-    const { openapi } = await import('./plugin.ts')
+    const { openapi } = await import('../src/plugin.ts')
     const routes = router().include('/widgets', modelViewSet({ model: Widget, serializer: WidgetSerializer }))
     const app = new Elysia().use(openapi([routes], { title: 'Standalone', version: '9.9.9' }))
 
@@ -138,7 +138,7 @@ describe('the plugin surface', () => {
   })
 
   test('mcp() exposes routers as tools without a project', async () => {
-    const { angus, mcp, mount } = await import('./plugin.ts')
+    const { angus, mcp, mount } = await import('../src/plugin.ts')
     const routes = router().include('/widgets', modelViewSet({ model: Widget, serializer: WidgetSerializer, pagination: false }))
 
     let self: Elysia<any, any>

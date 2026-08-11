@@ -14,11 +14,11 @@
 
 import { describe, expect, test } from 'bun:test'
 import type { TSchema } from 'elysia'
-import { displayValue, isEditable, parseValue, widget } from './admin/widgets.ts'
-import { f, type AnyField, type FieldKind } from './db/fields.ts'
-import { defineModel } from './db/model.ts'
-import { buildTables } from './db/schema.ts'
-import { fieldSchema } from './serializers/schema.ts'
+import { displayValue, isEditable, parseValue, widget } from '../src/admin/widgets.ts'
+import { f, type AnyField, type FieldKind } from '../src/db/fields.ts'
+import { defineModel } from '../src/db/model.ts'
+import { buildTables } from '../src/db/schema.ts'
+import { fieldSchema } from '../src/serializers/schema.ts'
 
 /** One representative field per kind, plus a value that should round-trip. */
 const Target = defineModel('conformanceTarget', { fields: { label: f.char({ maxLength: 20 }) } })
@@ -161,10 +161,10 @@ describe('the MCP consumer', () => {
     // MCP reads route schemas, which come from serializers, so the chain is
     // model -> serializer -> route -> tool. Proving the serializer link covers
     // it is what makes MCP a *reader* rather than a fourth implementation.
-    const { serializer } = await import('./serializers/index.ts')
-    const { buildTools } = await import('./mcp/tools.ts')
-    const { router } = await import('./routing/router.ts')
-    const { modelViewSet } = await import('./routing/viewset.ts')
+    const { serializer } = await import('../src/serializers/index.ts')
+    const { buildTools } = await import('../src/mcp/tools.ts')
+    const { router } = await import('../src/routing/router.ts')
+    const { modelViewSet } = await import('../src/routing/viewset.ts')
 
     const fields = Object.fromEntries(CASES.map((c, index) => [`field${index}`, c.field]))
     const model = defineModel('conformanceMcp', { fields })

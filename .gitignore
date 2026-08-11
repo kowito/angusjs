@@ -5,9 +5,11 @@ node_modules/
 *.sqlite-wal
 .env
 generated-live.ts
+.client-live.ts
 .client-check/
 storage-test
 .storage-test/
+*.tgz
 
 # Built documentation — regenerate with `bun scripts/build-docs.ts`.
 site/

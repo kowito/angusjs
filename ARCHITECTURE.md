@@ -237,6 +237,7 @@ Escape hatches are part of the contract, not an admission of failure:
 ```text
 src/
   tracing.ts    OpenTelemetry spans — a leaf, imported by anything
+  html.ts       HTML rendering for the admin and docs page — also a leaf
   db/           models, fields, QuerySets, lookups, Drizzle bridge, connection
   serializers/  FieldSpec -> TypeBox, representation and validation
   routing/      Router, views, ViewSets, permissions
@@ -249,6 +250,17 @@ src/
 ```
 
 The dependency direction is strictly downward: `core` may import `routing`, `routing` may import `db`, and `db` imports nothing from Angus except the top-level leaves (`tracing.ts`, `html.ts`), which import nothing themselves. Tracing has to be a leaf for exactly this reason — the query layer reports spans, and putting the tracer under `core` would have inverted the direction the rest of the architecture depends on. `admin`, `openapi` and `mcp` are readers — they depend on `db` and `routing` and are depended on by nothing except `core`.
+
+Around it:
+
+```text
+tests/        cross-cutting suites: plugin surface, dialect conformance, production audit
+docs/         documentation site source
+examples/     runnable projects
+scripts/      development tooling
+```
+
+Unit tests sit beside the code they test. The suites in `tests/` span several areas at once, which is also why they are not in `src/` — the published package ships `src/` and should not carry them.
 
 ---
 

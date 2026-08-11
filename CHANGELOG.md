@@ -5,6 +5,24 @@ contain breaking changes; those are listed first in each entry.
 
 ## Unreleased
 
+### Changed — project layout
+
+Cross-cutting test suites moved from `src/` to `tests/`, so `src/` is library
+code and its unit tests, and nothing that spans several areas at once. It also
+keeps them out of the published package.
+
+Added `SECURITY.md` — a framework handling passwords, OAuth flows and agent
+authorisation should say where to report a problem, and it documents the
+security decisions rather than leaving them to be reverse-engineered. Added
+`CONTRIBUTING.md` and `.editorconfig`.
+
+Removed `.client-live.ts`, a generated client left behind by a verification run
+and committed by accident.
+
+`bun run test:postgres` refuses to run rather than silently falling back to
+SQLite when `ANGUS_TEST_DATABASE_URL` is unset — a Postgres check that quietly
+tests SQLite is worse than no check.
+
 ### Fixed — three bugs found by running the suite on Postgres
 
 The suite had only ever run on SQLite. Pointing it at a real Postgres server

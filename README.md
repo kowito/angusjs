@@ -196,6 +196,14 @@ It has never been run in production by anyone. That is the honest limit on any c
 
 ---
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). The one thing worth reading before an ORM change: run `bun run test:postgres` as well as `bun test`, because SQLite is permissive enough to pass tests that Postgres rejects.
+
+Security issues go to [SECURITY.md](SECURITY.md), privately rather than as an issue.
+
+---
+
 ## Licence
 
 MIT. See [LICENSE](LICENSE).
