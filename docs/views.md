@@ -50,10 +50,15 @@ Six endpoints: list, create, retrieve, update, partial update, destroy. Each car
 | `actions` | Which of the six to generate |
 | `filterFields` | Fields exposed as `?status=draft&views__gte=10` |
 | `searchFields` | Fields scanned by `?search=` |
+
 | `orderingFields` | Fields allowed in `?ordering=-createdAt` |
 | `selectRelated` | Foreign keys to join |
 | `pagination` | A paginator, or `false` for a bare array |
 | `hooks` | `beforeCreate`, `beforeUpdate`, `beforeDestroy` |
+
+Every field named above is checked against the model when the view set is
+built. A typo throws immediately — `searchFields names "titel"… Did you mean
+"title"?` — rather than silently doing nothing at request time.
 
 ## Permissions
 

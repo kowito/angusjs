@@ -18,6 +18,7 @@ import { seed as seedCommand } from './commands/seed.ts'
 import { worker as workerCommand } from './commands/worker.ts'
 import { makemigrations, migrate } from './commands/migrations.ts'
 import { startapp, startproject } from './commands/scaffold.ts'
+import { nearest } from '../suggest.ts'
 import { bold, cyan, dim, fail, green, info } from './ui.ts'
 
 const VERSION = '0.1.0'
@@ -168,7 +169,8 @@ async function main(argv: string[]): Promise<number> {
 
   const command = COMMANDS[name]
   if (!command) {
-    fail(`Unknown command "${name}".`)
+    const suggestion = nearest(name, Object.keys(COMMANDS))
+    fail(`Unknown command "${name}".${suggestion ? ` Did you mean \`${suggestion}\`?` : ''}`)
     info('')
     usage()
     return 1

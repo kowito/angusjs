@@ -8,9 +8,11 @@
 
 import { t, type TSchema } from 'elysia'
 import { Q } from '../db/lookups.ts'
+import type { FieldSpec } from '../db/fields.ts'
 import type { AnyModel, RowOf } from '../db/model.ts'
 import type { QuerySet } from '../db/queryset.ts'
 import { NotFound, PermissionDenied, Unauthorized } from '../http/errors.ts'
+import { didYouMean } from '../suggest.ts'
 import { pageNumberPagination, type Paginator } from '../http/pagination.ts'
 import type { Serializer } from '../serializers/index.ts'
 import { Router, type Context, type Permission } from './router.ts'
@@ -226,9 +228,39 @@ export function modelViewSet<M extends AnyModel>(options: ModelViewSetOptions<M>
   const paginator: Paginator | null =
     options.pagination === false ? null : (options.pagination ?? pageNumberPagination())
 
+  // Every field a view set names is validated the moment it is built, not the
+  // first time a request happens to exercise it. A `searchFields: ['titel']`
+  // typo otherwise makes `?search=` quietly do nothing, and the developer
+  // concludes search is broken rather than misspelled.
+  const fieldNames = Object.keys(model.fields)
+  const assertField = (kind: string, name: string, predicate?: (spec: FieldSpec) => boolean, requirement?: string) => {
+    const field = model.fields[name]
+    if (!field) {
+      throw new Error(
+        `modelViewSet(${model.name}): ${kind} names "${name}", which is not a field on ${model.name}.` +
+          didYouMean(name, fieldNames),
+      )
+    }
+    if (predicate && !predicate(field.spec)) {
+      throw new Error(`modelViewSet(${model.name}): ${kind} names "${name}", but ${requirement}.`)
+    }
+  }
+
+  for (const name of filterFields) assertField('filterFields', name)
+  for (const name of searchFields) assertField('searchFields', name)
+  for (const name of orderingFields) assertField('orderingFields', name)
+  // selectRelated must name a relation — it is untyped `string[]`, so a wrong
+  // name here is the one the type checker cannot catch, and it silently skips
+  // the join rather than failing.
+  for (const name of selectRelated) {
+    assertField('selectRelated', name, (spec) => spec.kind === 'foreignKey', 'that field is not a foreign key')
+  }
+
   const lookupSpec = model.fields[lookupField]
   if (!lookupSpec) {
-    throw new Error(`modelViewSet(${model.name}): lookupField "${lookupField}" is not a field.`)
+    throw new Error(
+      `modelViewSet(${model.name}): lookupField "${lookupField}" is not a field.` + didYouMean(lookupField, fieldNames),
+    )
   }
   const lookupIsNumeric = ['auto', 'bigAuto', 'integer', 'bigInteger', 'smallInteger', 'foreignKey'].includes(
     lookupSpec.spec.kind,

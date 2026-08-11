@@ -5,6 +5,30 @@ contain breaking changes; those are listed first in each entry.
 
 ## Unreleased
 
+### Added — view sets validate their field references, with suggestions
+
+`modelViewSet` now checks every field it is given — `filterFields`,
+`searchFields`, `orderingFields`, `selectRelated`, `lookupField` — against the
+model the moment it is built, and suggests the right name on a typo:
+
+    modelViewSet(Post): searchFields names "titel", which is not a field on
+    Post. Did you mean "title"?
+
+The failure this ends is the quiet one. A mistyped `searchFields` made `?search=`
+silently do nothing, so the developer concluded search was broken rather than
+misspelled. `selectRelated` is the sharpest case: it is typed `string[]`, so the
+type checker cannot catch a bad name, and a wrong one skipped the join without a
+word. It must now name an actual foreign key.
+
+Suggestions come from a new leaf module used across the framework. It uses
+Damerau edit distance, so a transposition (`titel` for `title`) reads as one
+edit rather than two, and a tight length-scaled threshold, so a real typo gets a
+suggestion while nonsense gets silence — `serer` is offered nothing rather than
+a confident wrong `seed`.
+
+`angus <typo>` uses the same thing: `angus migrat` now answers "Did you mean
+`migrate`?"
+
 ### Added — permission denials name the gate (in development)
 
 A 403 knew exactly which permission refused and threw it away. Now it keeps it:
