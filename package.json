@@ -38,6 +38,7 @@
     "!src/**/*.test.ts",
     "SECURITY.md",
     "README.md",
+    "CHANGELOG.md",
     "ARCHITECTURE.md",
     "UPSTREAM.md",
     "LICENSE"

@@ -1,0 +1,117 @@
+name: Publish
+
+# Publishing is triggered by cutting a GitHub Release, not by a push. That gives
+# a deliberate human step, a place for release notes, and a tag to publish
+# against — and it means an ordinary merge to main never ships a package.
+#
+# workflow_dispatch is here for a dry run: pack and verify without publishing.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Pack and verify, but do not publish
+        type: boolean
+        default: true
+
+# id-token: write is what lets npm attach a signed provenance attestation, so
+# anyone installing can verify the package was built from this repo and workflow
+# rather than uploaded from someone's laptop. contents: read is all the rest of
+# the job needs.
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  # The same gate CI runs, repeated here so a release cannot publish code that
+  # was never green — a release is cut from a tag, and nothing guarantees that
+  # tag ever passed CI.
+  verify:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: angus_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Test (SQLite)
+        run: bun test
+
+      - name: Test (Postgres)
+        run: bun test
+        env:
+          ANGUS_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/angus_test
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # setup-node is here only for npm: it does the publish, because npm's
+      # provenance and registry auth are more mature than bun's. Tests and the
+      # prepublishOnly gate still run under bun.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - run: bun install --frozen-lockfile
+
+      # A release tagged v0.2.0 that ships package.json@0.1.0 is a silent lie to
+      # everyone who reads the version. Refuse the mismatch rather than publish
+      # it. Skipped on a manual dry run, which has no tag.
+      - name: Tag matches package.json
+        if: github.event_name == 'release'
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG="$(node -p "require('./package.json').version")"
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::release tag ($TAG) does not match package.json ($PKG). Bump the version, commit, then re-tag."
+            exit 1
+          fi
+          echo "publishing $PKG"
+
+      # A dry run packs the tarball and prints its contents, so a release can be
+      # rehearsed without claiming the version.
+      - name: Dry run
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run
+        run: npm publish --dry-run --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # --provenance signs the build; --access public is required for a scoped
+      # first publish and harmless for an unscoped one. prepublishOnly reruns the
+      # typecheck and tests one last time under bun before the upload.
+      - name: Publish
+        if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && !inputs.dry_run)
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
