@@ -146,7 +146,7 @@ export function errorTranslation(options: ErrorTranslationOptions = {}): Elysia<
     if (code === 'VALIDATION') {
       set.status = 422
       const validation = error as unknown as {
-        all?: { path?: string; message?: string; schema?: SchemaLike }[]
+        all?: { path?: string; message?: string; schema?: SchemaLike; value?: unknown }[]
         message: string
       }
       const errors: Record<string, string[]> = {}
@@ -154,7 +154,7 @@ export function errorTranslation(options: ErrorTranslationOptions = {}): Elysia<
         const field = (issue.path ?? '').replace(/^\//, '') || 'detail'
         // Prefer a sentence reconstructed from the schema's real constraint over
         // TypeBox's structural message, which names the shape, not the rule.
-        ;(errors[field] ??= []).push(describeConstraint(issue.schema, issue.message ?? 'Invalid value.'))
+        ;(errors[field] ??= []).push(describeConstraint(issue.schema, issue.message ?? 'Invalid value.', issue.value))
       }
       return {
         error: 'ValidationError',
@@ -186,7 +186,6 @@ export function errorTranslation(options: ErrorTranslationOptions = {}): Elysia<
   return plugin as unknown as Elysia<any, any>
 }
 
-/** Keeps a custom `code` if one was set, otherwise derives it from the status. */
 /** The constraint-bearing shape of a TypeBox schema, as far as this needs it. */
 interface SchemaLike {
   type?: string
@@ -224,7 +223,7 @@ function collectConsts(members: SchemaLike[] | undefined): unknown[] | null {
   return values.every((value) => value !== undefined) ? values : null
 }
 
-export function describeConstraint(schema: SchemaLike | undefined, fallback: string): string {
+export function describeConstraint(schema: SchemaLike | undefined, fallback: string, value?: unknown): string {
   if (!schema) return fallback
 
   // Flatten a coercing union onto its wrapper, so `minimum` on either surfaces.
@@ -235,10 +234,14 @@ export function describeConstraint(schema: SchemaLike | undefined, fallback: str
     }
   }
 
-  // A whole-number constraint reads as its own sentence — and it is checked
-  // before the min/max bounds because "must be a whole number" is the more
-  // fundamental thing to say about `2.5`.
-  if (merged.multipleOf === 1) return 'must be a whole number'
+  // "Must be a whole number" only when the value actually is fractional. Every
+  // integer field's schema carries `multipleOf: 1`, so claiming it for any
+  // failure would mislabel a range violation like -3 as a fraction.
+  const asNumber =
+    typeof value === 'number' ? value : typeof value === 'string' && value.trim() !== '' ? Number(value) : NaN
+  if (merged.multipleOf === 1 && Number.isFinite(asNumber) && !Number.isInteger(asNumber)) {
+    return 'must be a whole number'
+  }
 
   if (merged.format === 'email') return 'must be a valid email address'
   if (merged.format === 'uri') return 'must be a valid URL'

@@ -50,10 +50,22 @@ export interface AdminSiteOptions {
   /** Where the admin is mounted, relative to its app prefix. */
   path?: string
   /**
-   * Who may use the admin. When omitted, the admin is open in development and
-   * refuses to serve in production — see `guard` below.
+   * Who may use the admin. When omitted, the admin refuses every request — see
+   * `guard` below — unless `insecureAllowUnauthenticated` is set.
    */
   permissions?: Permission[]
+  /**
+   * Serve the admin with **no authentication at all** when `permissions` is
+   * omitted. Every model becomes anonymously readable, writable and deletable.
+   *
+   * This exists only so a freshly scaffolded project is explorable before an
+   * auth system is wired up. It is never safe in production, prints a warning
+   * on every startup, and is flagged by `angus check --deploy`. The default is
+   * to refuse rather than to guess from `NODE_ENV`, because "the environment
+   * variable was not set to production" is not evidence that exposing every
+   * row is safe.
+   */
+  insecureAllowUnauthenticated?: boolean
 }
 
 /** Rows fetched to populate a relation dropdown. Beyond this, the select is unusable anyway. */
@@ -64,11 +76,23 @@ export class AdminSite {
   readonly title: string
   readonly path: string
   private readonly permissions: Permission[] | undefined
+  private readonly insecureOpen: boolean
 
   constructor(options: AdminSiteOptions = {}) {
     this.title = options.title ?? 'Admin'
     this.path = options.path ?? '/admin'
     this.permissions = options.permissions
+    this.insecureOpen = options.insecureAllowUnauthenticated === true
+
+    if (this.insecureOpen && (!this.permissions || this.permissions.length === 0)) {
+      // Loud, every startup: an open admin is the sort of thing that ships by
+      // accident, and a warning is the last line of defence before it does.
+      console.warn(
+        '[angus] SECURITY: the admin is serving without authentication ' +
+          '(insecureAllowUnauthenticated). Every model is anonymously readable and ' +
+          'writable. Configure `permissions` before deploying anywhere public.',
+      )
+    }
   }
 
   /** Registers a model, Django's `admin.site.register`. */
@@ -109,10 +133,12 @@ export class AdminSite {
   // -------------------------------------------------------------------------
 
   /**
-   * The admin exposes every row of every registered model, so it fails closed.
-   * With no `permissions` configured it serves only outside production — which
-   * keeps `startproject` usable without forcing an auth system on day one, but
-   * never ships an open admin by accident.
+   * The admin exposes every row of every registered model, so it fails closed
+   * in every environment. It serves only when `permissions` are configured, or
+   * when `insecureAllowUnauthenticated` is explicitly set for local
+   * exploration. It deliberately does not decide from `NODE_ENV`: an unset or
+   * misspelled variable on a public deploy would otherwise leave every model
+   * anonymously writable, which is exactly the accident this guards against.
    */
   private guard(): Permission {
     if (this.permissions && this.permissions.length > 0) {
@@ -123,14 +149,14 @@ export class AdminSite {
       }
     }
 
+    if (this.insecureOpen) return () => true
+
     return () => {
-      if (Bun.env.NODE_ENV === 'production') {
-        throw new PermissionDenied(
-          'The admin has no `permissions` configured, so it is disabled in production. ' +
-            'Pass permissions to adminSite({ permissions: [...] }) to enable it.',
-        )
-      }
-      return true
+      throw new PermissionDenied(
+        'The admin has no `permissions` configured, so it refuses to serve. Pass ' +
+          'adminSite({ permissions: [isStaff] }) to protect it, or ' +
+          'adminSite({ insecureAllowUnauthenticated: true }) to open it without auth for local use.',
+      )
     }
   }
 

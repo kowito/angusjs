@@ -29,7 +29,7 @@ const Member = defineModel('member', {
   meta: { ordering: ['name'] },
 })
 
-const admin = adminSite({ title: 'Test admin' })
+const admin = adminSite({ title: 'Test admin', insecureAllowUnauthenticated: true })
 admin.register(Team, { group: 'Org', listDisplay: ['id', 'name'], searchFields: ['name'] })
 admin.register(Member, {
   group: 'Org',
@@ -399,17 +399,20 @@ describe('access control', () => {
     expect(status).toBe(303)
   })
 
-  test('configured permissions gate every page', async () => {
+  test('an admin with no permissions and no opt-in refuses to serve, in every environment', async () => {
+    // The security fix: no more "open unless NODE_ENV is exactly production".
+    // With neither `permissions` nor `insecureAllowUnauthenticated`, it fails
+    // closed — an unset or misspelled env var can no longer expose every model.
     const locked = adminSite({ title: 'Locked', path: '/locked' })
     locked.register(Team)
     const lockedApp = await createApp(
       { apps: [locked.app('locked-admin')], openapi: false },
       { connectDatabase: false },
     )
-    // No `user` is ever derived, so the staff check always fails.
-    const response = await lockedApp.handle(new Request('http://test/locked'))
-    expect(response.status).toBe(200)
+    expect((await lockedApp.handle(new Request('http://test/locked'))).status).toBe(403)
+  })
 
+  test('configured permissions gate every page', async () => {
     const guarded = adminSite({
       title: 'Guarded',
       path: '/guarded',

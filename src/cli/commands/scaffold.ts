@@ -103,12 +103,18 @@ export async function startproject(args: string[]): Promise<number> {
  * The project's admin site. Each app registers its own models into it from
  * \`apps/<name>/admin.ts\`.
  *
- * With no \`permissions\` configured the admin serves in development and refuses
- * to serve in production. Before deploying, give it a real check:
+ * It is open with NO authentication right now, so you can explore it
+ * immediately — every model is anonymously readable and writable. Before
+ * deploying anywhere, replace \`insecureAllowUnauthenticated\` with a real check:
  *
  *   adminSite({ title: ${JSON.stringify(`${name} admin`)}, permissions: [isStaff] })
+ *
+ * \`angus check --deploy\` will fail while the insecure flag is set.
  */
-export default adminSite({ title: ${JSON.stringify(`${name} admin`)} })
+export default adminSite({
+  title: ${JSON.stringify(`${name} admin`)},
+  insecureAllowUnauthenticated: true,
+})
 `,
   )
 

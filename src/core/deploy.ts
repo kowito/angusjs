@@ -101,7 +101,7 @@ export function deployChecks(rawSettings: Settings, options: DeployCheckOptions 
         'error',
         'admin-unguarded',
         'The admin is installed with no permissions configured.',
-        'Pass `adminSite({ permissions: [isStaff] })`. Without it the admin refuses to serve in production, so it will simply be unavailable.',
+        'Pass `adminSite({ permissions: [isStaff] })`. Without it the admin either refuses to serve, or — if `insecureAllowUnauthenticated` is set, as a fresh scaffold does — serves every model with no authentication at all.',
       )
     }
   }
