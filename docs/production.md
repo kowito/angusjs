@@ -90,12 +90,42 @@ SQLite and Postgres. MySQL is not supported, and that is settled rather than pen
 
 ## Testing
 
+An in-memory database and a client that drives the app through `app.handle()` —
+real routing, real validation, no port and no network.
+
 ```ts
 const db = await testDatabase({ models: [Post] })
-await db.reset()
+const client = clientFor(app)          // or testClient(settings)
 
+const post = (await client.post('/posts', { title: 'Hello' })).expect(201)
+expect(post.title).toBe('Hello')
+```
+
+`.expect(status)` returns the body when the status matches and throws otherwise —
+and the throw is where the time is saved. On a mismatch it prints the response
+body, and on a **404 it tells you what the app actually serves**:
+
+```text
+Expected status 200 for GET /postz, got 404.
+GET /postz did not match any route. This app serves: DELETE /posts/:id;
+GET /posts; GET /posts/:id; PATCH /posts/:id; POST /posts; PUT /posts/:id.
+```
+
+It recognises the mistakes that actually happen: a POST to a read-only route
+(*"/posts accepts GET, POST"*), a path off by a trailing slash, and a path that
+dropped the API prefix. A bare `NOT_FOUND` makes you guess; this does not.
+
+`client.routes()` lists what the app serves, and `db.reset()` clears every row
+between tests.
+
+```ts
 const { count } = await countQueries(() => loadDashboard())
 expect(count).toBeLessThan(5)
 ```
 
 `countQueries` is how an N+1 assertion becomes a test rather than a code review comment.
+
+> Drive the app through the client, not a hand-built `new Request()`. A single-
+> character host like `http://x/path` misparses and returns 404 for reasons that
+> have nothing to do with your code — the client uses a safe origin so that trap
+> never comes up.

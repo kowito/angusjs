@@ -294,6 +294,88 @@ export interface TestResponse<T = any> {
   body: T
   text: string
   ok: boolean
+  /**
+   * Asserts the status and returns the body, so a test reads as one line:
+   *
+   * ```ts
+   * const post = (await client.post('/posts', input)).expect(201)
+   * ```
+   *
+   * On a mismatch it throws with the response body — and when the status is a
+   * 404, with the route the app actually serves. A silent `NOT_FOUND` is the
+   * single most time-wasting thing a test can hand you: the framework knows its
+   * own routes, so there is no excuse for making you guess which one you missed.
+   */
+  expect(status: number): T
+}
+
+/** A route the app serves, as read from Elysia's own table. */
+interface ServedRoute {
+  method: string
+  path: string
+}
+
+/** Reads the routes an Elysia app serves, tolerant of shape changes. */
+function servedRoutes(app: Elysia<any, any>): ServedRoute[] {
+  const raw = (app as unknown as { routes?: { method?: string; path?: string }[] }).routes ?? []
+  return raw
+    .filter((route) => route.method && route.path)
+    .map((route) => ({ method: String(route.method).toUpperCase(), path: String(route.path) }))
+}
+
+/**
+ * Explains a 404 by naming what the app *does* serve.
+ *
+ * The failures this is built for, in the order they actually happen:
+ *
+ * - The path matches but the method is wrong — a POST to a read-only route.
+ * - The path is off by a trailing slash, or by the API prefix a test forgot.
+ * - A plain typo, close to a real route.
+ *
+ * Returns null when nothing useful can be said, so the caller can fall back to
+ * the bare status rather than print noise.
+ */
+export function diagnoseNotFound(app: Elysia<any, any>, method: string, path: string): string | null {
+  const routes = servedRoutes(app)
+  if (routes.length === 0) return null
+
+  const wanted = method.toUpperCase()
+  const samePath = routes.filter((route) => route.path === path)
+
+  // The path exists — only the method is off. The most precise thing to say.
+  if (samePath.length > 0) {
+    const allowed = [...new Set(samePath.map((route) => route.method))].sort().join(', ')
+    return `${wanted} ${path} did not match, but ${path} accepts ${allowed}.`
+  }
+
+  // Off by a trailing slash, either direction.
+  const toggled = path.endsWith('/') ? path.slice(0, -1) : `${path}/`
+  if (routes.some((route) => route.path === toggled && route.method === wanted)) {
+    return `${wanted} ${path} did not match, but ${wanted} ${toggled} does — check the trailing slash.`
+  }
+
+  // Same method, a path that looks like a near miss (a shared segment, or a
+  // prefix the request dropped or added).
+  const near = routes
+    .filter((route) => route.method === wanted)
+    .filter((route) => {
+      const a = route.path.split('/').filter(Boolean)
+      const b = path.split('/').filter(Boolean)
+      return a.some((segment) => b.includes(segment)) || route.path.endsWith(path) || path.endsWith(route.path)
+    })
+    .map((route) => route.path)
+
+  if (near.length > 0) {
+    return `${wanted} ${path} did not match. Did you mean one of: ${[...new Set(near)].join(', ')}?`
+  }
+
+  // Nothing close. List what exists, capped so the message stays readable.
+  const listed = routes
+    .map((route) => `${route.method} ${route.path}`)
+    .sort()
+    .slice(0, 12)
+  const more = routes.length > 12 ? `, and ${routes.length - 12} more` : ''
+  return `${wanted} ${path} did not match any route. This app serves: ${listed.join('; ')}${more}.`
 }
 
 export interface TestClientOptions {
@@ -346,13 +428,39 @@ export class TestClient {
       }
     }
 
+    const status = response.status
+    const app = this.app
+
     return {
-      status: response.status,
+      status,
       headers: response.headers,
       body: body as T,
       text,
-      ok: response.status >= 200 && response.status < 300,
+      ok: status >= 200 && status < 300,
+      expect(expected: number): T {
+        if (status === expected) return body as T
+
+        // Build the message lazily and only on failure, so the common path
+        // pays nothing for the diagnosis.
+        const lines = [`Expected status ${expected} for ${method} ${path}, got ${status}.`]
+
+        if (status === 404) {
+          const hint = diagnoseNotFound(app, method, path)
+          if (hint) lines.push(hint)
+        }
+
+        // The body usually says what went wrong — a validation error names the
+        // field, a permission error says which. Losing it forces a rerun.
+        if (text !== '') lines.push(`Response body: ${text.length > 500 ? `${text.slice(0, 500)}…` : text}`)
+
+        throw new Error(lines.join('\n'))
+      },
     }
+  }
+
+  /** The routes this app serves, for a test that needs to assert or inspect them. */
+  routes(): { method: string; path: string }[] {
+    return servedRoutes(this.app).sort((a, b) => a.path.localeCompare(b.path) || a.method.localeCompare(b.method))
   }
 
   get<T = any>(path: string, init?: RequestInit) {

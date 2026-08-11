@@ -5,6 +5,24 @@ contain breaking changes; those are listed first in each entry.
 
 ## Unreleased
 
+### Added — a route-aware test client
+
+`TestResponse.expect(status)` returns the body when the status matches and
+throws otherwise. The throw is the point: on a mismatch it includes the response
+body, and on a 404 it says what the app actually serves — the wrong method for a
+path ("/posts accepts GET, POST"), a trailing-slash miss, a dropped prefix, or a
+near-miss path. A bare `NOT_FOUND` makes you guess; the framework knows its own
+routes, so this does not.
+
+`client.routes()` lists them directly. Both come from Elysia's own route table,
+so they cannot drift from what is served.
+
+This came out of a real episode: chasing a "broken" viewset for twenty minutes
+when the actual cause was a test URL with a single-character host
+(`http://x/path`) that misparses to a 404. The client uses a safe origin so that
+trap cannot recur, and the diagnosis would have ended the hunt on the first
+assertion.
+
 ### Fixed — stored XSS through URL fields in the admin (security)
 
 A `url` field value rendered into an `<a href>` in the admin was HTML-escaped
