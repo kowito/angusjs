@@ -73,7 +73,16 @@ function baseSchema(spec: FieldSpec, mode: SchemaMode): TSchema {
 
     case 'char':
     case 'text':
-      return t.String({ ...notes, maxLength: spec.maxLength, minLength: spec.minLength })
+      return t.String({
+        ...notes,
+        maxLength: spec.maxLength,
+        // A non-blank string is required to be non-empty on the way in — that
+        // is what `blank: false` means, and without a minimum length the empty
+        // string slipped past it. Only on write, so a value already stored is
+        // never rejected on the way out.
+        minLength:
+          mode === 'write' && !spec.blank ? Math.max(1, spec.minLength ?? 1) : spec.minLength,
+      })
 
     case 'email':
       return t.String({ ...notes, format: 'email', maxLength: spec.maxLength })

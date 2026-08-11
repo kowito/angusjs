@@ -288,8 +288,19 @@ export function realtime(options: RealtimeOptions = {}): (app: Elysia<any, any>)
           return reply({ error: `At most ${maxSubscriptions} subscriptions per connection.` })
         }
 
+        // Reserve the slot synchronously, before the await, so a second
+        // subscribe for the same channel arriving mid-authorization sees it as
+        // taken. Without this both messages passed the has() check, both
+        // subscribed to the broker, and the second overwrote the first in the
+        // map — leaking a handler and doubling every event.
+        const reservation = () => {}
+        subscriptions.set(name, reservation)
+
         const resolved = await authorizeSubscription(name, ws.data.user)
-        if (!resolved.ok) return reply({ error: resolved.reason })
+        if (!resolved.ok) {
+          if (subscriptions.get(name) === reservation) subscriptions.delete(name)
+          return reply({ error: resolved.reason })
+        }
 
         const unsubscribe = resolved.channel.subscribe((payload) => {
           const visible = forSubscriber(resolved.channel, payload, ws.data.user)
@@ -297,8 +308,15 @@ export function realtime(options: RealtimeOptions = {}): (app: Elysia<any, any>)
           ws.send(JSON.stringify({ channel: name, data: visible }))
         })
 
-        subscriptions.set(name, unsubscribe)
-        reply({ subscribed: name })
+        // If the connection unsubscribed or closed while authorization was in
+        // flight, the reservation is gone — don't install a live handler on a
+        // dead socket.
+        if (subscriptions.get(name) === reservation) {
+          subscriptions.set(name, unsubscribe)
+          reply({ subscribed: name })
+        } else {
+          unsubscribe()
+        }
       },
 
       close(ws: any) {

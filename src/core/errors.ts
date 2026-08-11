@@ -269,11 +269,20 @@ export function describeConstraint(schema: SchemaLike | undefined, fallback: str
   if (merged.minimum !== undefined) return `must be at least ${merged.minimum}`
   if (merged.maximum !== undefined) return `must be at most ${merged.maximum}`
 
+  // Length: name the bound the value actually crossed, since a non-blank string
+  // carries both a minimum (1) and a maximum. An empty value against `minLength:
+  // 1` reads as required rather than "at least 1 characters".
+  const length = typeof value === 'string' ? value.length : undefined
+  if (merged.maxLength !== undefined && (length === undefined ? merged.minLength === undefined : length > merged.maxLength)) {
+    return `must be at most ${merged.maxLength} characters`
+  }
+  if (merged.minLength !== undefined && (length === undefined || length < merged.minLength)) {
+    return merged.minLength === 1 ? 'must not be empty' : `must be at least ${merged.minLength} characters`
+  }
   if (merged.minLength !== undefined && merged.maxLength !== undefined) {
     return `must be between ${merged.minLength} and ${merged.maxLength} characters`
   }
   if (merged.maxLength !== undefined) return `must be at most ${merged.maxLength} characters`
-  if (merged.minLength !== undefined) return `must be at least ${merged.minLength} characters`
 
   if (merged.pattern !== undefined) return 'is not in the expected format'
 

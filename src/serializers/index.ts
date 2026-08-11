@@ -251,7 +251,13 @@ export function serializer<
   const write = t.Object(writeProperties, { title: `${schemaName}Input` })
   const patch = t.Partial(write, { title: `${schemaName}Patch` })
 
-  const dateKinds = new Set(['date', 'datetime'])
+  // A `date` field is a calendar date with no time, so it is formatted from the
+  // Date's *local* components. Slicing toISOString() (UTC) shifts the day across
+  // the offset — in UTC+9, a Date at local midnight of the 15th is 15:00Z of the
+  // 14th, and the user who entered the 15th got the 14th back.
+  const localDate = (value: Date): string =>
+    `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`
+
 
   async function toRepresentation(row: RowOf<M>): Promise<any> {
     const source = row as Record<string, unknown>
@@ -262,8 +268,8 @@ export function serializer<
       const value = source[key]
       output[key] =
         value instanceof Date
-          ? dateKinds.has(model.fields[attr]!.spec.kind) && model.fields[attr]!.spec.kind === 'date'
-            ? value.toISOString().slice(0, 10)
+          ? model.fields[attr]!.spec.kind === 'date'
+            ? localDate(value)
             : value.toISOString()
           : value
     }

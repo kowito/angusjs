@@ -287,7 +287,15 @@ export class QuerySet<M extends AnyModel, R = RowOf<M>> implements PromiseLike<R
     const ctx = this.context(connection)
     const table = connection.table(this.model)
 
-    let query = activeDb(connection).select(this.selection(connection)).from(table).$dynamic()
+    // `distinct()` has to choose the builder up front — Drizzle has no chainable
+    // `.distinct()` to add later, which is why the flag was silently doing
+    // nothing.
+    const db = activeDb(connection)
+    let query = (
+      this.state.distinct ? db.selectDistinct(this.selection(connection)) : db.select(this.selection(connection))
+    )
+      .from(table)
+      .$dynamic()
 
     for (const relation of this.state.selectRelated) {
       const target = this.model.fields[relation]!.spec.to!()
@@ -389,6 +397,15 @@ export class QuerySet<M extends AnyModel, R = RowOf<M>> implements PromiseLike<R
   async count(): Promise<number> {
     const connection = getConnection()
     await transactionGate(connection)
+
+    // A distinct queryset counts distinct rows, so count over the distinct
+    // selection as a subquery rather than counting the raw table.
+    if (this.state.distinct) {
+      const subquery = this.unordered().compile(connection).as('distinct_rows')
+      const [row] = await activeDb(connection).select({ value: countAgg() }).from(subquery)
+      return Number(row?.value ?? 0)
+    }
+
     const ctx = this.context(connection)
     let query = activeDb(connection)
       .select({ value: countAgg() })
