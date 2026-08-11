@@ -643,10 +643,14 @@ export class QuerySet<M extends AnyModel, R = RowOf<M>> implements PromiseLike<R
     const ctx = this.context(connection)
     const table = connection.table(this.model)
 
-    // A beforeDelete hook usually needs to see what is about to go, and after
-    // the DELETE it is too late — so the rows are read first, but only when
-    // something is actually listening.
-    const doomed = hasHooks(this.model, 'beforeDelete')
+    // Both hooks need to see what is going: beforeDelete to act while the rows
+    // still exist, afterDelete to report what went (a realtime broadcast, a
+    // cache purge). After the DELETE the rows are unrecoverable, so they are
+    // read first — but only when something is actually listening, since the read
+    // is a whole extra query. `broadcastOnWrite` registers only afterDelete, so
+    // reading solely for beforeDelete left every delete event carrying no rows.
+    const needsRows = hasHooks(this.model, 'beforeDelete') || hasHooks(this.model, 'afterDelete')
+    const doomed = needsRows
       ? ((await this.deriveAs<Record<string, unknown>>({ fields: undefined }).execute()) as Record<string, unknown>[])
       : []
 
