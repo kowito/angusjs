@@ -27,6 +27,7 @@ import {
 import type { AnyField, Field } from './fields.ts'
 import { isFExpression, type FExpression } from './expressions.ts'
 import type { AnyModel, FieldMap, FieldValue } from './model.ts'
+import { didYouMean } from '../suggest.ts'
 
 // ---------------------------------------------------------------------------
 // Type level
@@ -266,6 +267,18 @@ export function parseLookupKey(model: AnyModel, key: string): ParsedKey {
     }
 
     if (!isRelation) {
+      // A single trailing segment on a scalar field is a lookup that did not
+      // match — `views__biggerthan` for `views__gt` — not an attempt to
+      // traverse a relation. Diagnosing it as the latter sends the developer
+      // looking for a foreign key that was never the point.
+      if (rest.length === 1) {
+        throw new Error(
+          `Cannot resolve "${key}" on model "${model.name}": "${rest[0]}" is not a valid lookup ` +
+            `on field "${attr}".` +
+            didYouMean(rest[0]!, LOOKUP_NAMES) +
+            ` Valid lookups: ${LOOKUP_NAMES.join(', ')}.`,
+        )
+      }
       throw new Error(
         `Cannot resolve "${key}" on model "${model.name}": "${attr}" is not a relation, ` +
           `so "${rest.join('__')}" cannot be traversed.`,
@@ -293,9 +306,11 @@ function resolveAttr(model: AnyModel, segment: string, key: string, root: AnyMod
   if (segment in model.fields) return segment
   const stripped = segment.endsWith('Id') ? segment.slice(0, -2) : undefined
   if (stripped && model.fields[stripped]?.spec.kind === 'foreignKey') return stripped
+  const fields = Object.keys(model.fields)
   throw new Error(
-    `Cannot resolve "${key}" on model "${root.name}": "${model.name}" has no field named "${segment}". ` +
-      `Available: ${Object.keys(model.fields).join(', ')}.`,
+    `Cannot resolve "${key}" on model "${root.name}": "${model.name}" has no field named "${segment}".` +
+      didYouMean(segment, fields) +
+      ` Available: ${fields.join(', ')}.`,
   )
 }
 

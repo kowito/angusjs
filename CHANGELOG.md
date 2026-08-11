@@ -5,6 +5,23 @@ contain breaking changes; those are listed first in each entry.
 
 ## Unreleased
 
+### Improved — query errors point at the real mistake
+
+A filter built dynamically — from a query string, or cast past the typed keys —
+fails at runtime, and the message is the only guidance there is. Two were
+leading developers astray.
+
+An unknown field now suggests the right one: `has no field named "titel". Did
+you mean "title"?`
+
+An invalid lookup on a scalar field is now diagnosed as what it is. `views__biggerthan`
+used to report *"views is not a relation, so biggerthan cannot be traversed"* —
+sending the developer to hunt for a foreign key that was never the point. It now
+says `"biggerthan" is not a valid lookup on field "views"`, lists the valid
+lookups, and suggests one when it is close (`views__gte_` → *Did you mean
+"gte"?*). A genuine traversal mistake — two segments through a scalar — still
+reports the relation problem, because that is what it is.
+
 ### Added — view sets validate their field references, with suggestions
 
 `modelViewSet` now checks every field it is given — `filterFields`,
