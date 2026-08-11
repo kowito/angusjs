@@ -69,7 +69,11 @@ permissions: [isAuthenticated]
 actionPermissions: { destroy: [isStaff] }
 ```
 
-Built in: `allowAny`, `isAuthenticated`, `isStaff`, `isSuperuser`, `isActive`, `isEmailVerified`, `readOnlyOrAuthenticated`, `hasRole(...)`, `hasScope(...)`, and the combinators `not()` and `either()`.
+From `angusjs`: `allowAny`, `isAuthenticated`, `isStaff`, `readOnlyOrAuthenticated`, and the combinators `all(...)`, `any(...)`, `not(...)`. These need only `context.user`, so they work whether or not you use the built-in auth system. `isStaff` admits a superuser.
+
+From `angusjs/auth` (when you use the auth models): the above plus `isActive`, `isSuperuser`, `isEmailVerified`, `hasRole(...)`, `hasScope(...)`, `isOwner(...)`.
+
+`either(...)` is a deprecated alias of `any(...)`.
 
 When a permission refuses, the server logs which one, and in `debug` mode the
 403 body carries a `deniedBy` field naming the gate — so "why is this 403?" has

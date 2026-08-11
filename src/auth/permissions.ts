@@ -10,6 +10,20 @@
 import type { Context, Permission } from '../routing/router.ts'
 import type { SessionRow, UserRow } from './models.ts'
 
+// The base predicates and combinators have a single home in `routing`, which
+// `angusjs/auth` re-exports so this module is a complete authorization toolkit
+// without shipping second copies that could drift from the originals.
+export {
+  all,
+  allowAny,
+  any,
+  either,
+  isAuthenticated,
+  isStaff,
+  not,
+  readOnlyOrAuthenticated,
+} from '../routing/router.ts'
+
 /** What `authenticate` puts on the context. */
 export interface Identity {
   user: UserRow
@@ -30,14 +44,7 @@ export function userOf(context: Context): UserRow | null {
 // Predicates
 // ---------------------------------------------------------------------------
 
-export const isAuthenticated: Permission = (context) => Boolean(context.user)
-
 export const isActive: Permission = (context) => Boolean(userOf(context)?.isActive)
-
-export const isStaff: Permission = (context) => {
-  const user = userOf(context)
-  return Boolean(user && (user.isStaff || user.isSuperuser))
-}
 
 export const isSuperuser: Permission = (context) => Boolean(userOf(context)?.isSuperuser)
 
@@ -98,29 +105,6 @@ export function isOwner(param = 'userId'): Permission {
   })
 }
 
-/** Anonymous callers may read; writes require a signed-in user. */
-export const readOnlyOrAuthenticated: Permission = (context) => {
-  const method = (context.request as Request | undefined)?.method ?? 'GET'
-  return method === 'GET' || method === 'HEAD' || method === 'OPTIONS' || Boolean(context.user)
-}
-
-/** Passes when every one of `permissions` passes. */
-export function all(...permissions: Permission[]): Permission {
-  const label = `all(${permissions.map((p) => p.name || '?').join(', ')})`
-  return named(label, async (context) => {
-    for (const permission of permissions) if (!(await permission(context))) return false
-    return true
-  })
-}
-
-/** Passes when any one of `permissions` passes. */
-export function any(...permissions: Permission[]): Permission {
-  const label = `any(${permissions.map((p) => p.name || '?').join(', ')})`
-  return named(label, async (context) => {
-    for (const permission of permissions) if (await permission(context)) return true
-    return false
-  })
-}
 
 // ---------------------------------------------------------------------------
 // Row-level scoping

@@ -209,23 +209,51 @@ export const allowAny: Permission = () => true
 
 export const isAuthenticated: Permission = (context) => Boolean(context.user)
 
-export const isStaff: Permission = (context) => Boolean(context.user?.isStaff)
+/**
+ * A staff member, or a superuser — a superuser can do everything a staff member
+ * can, so denying one that is not separately flagged staff is a trap. This is
+ * the single canonical `isStaff`; `angusjs/auth` re-exports it rather than
+ * shipping a second one that behaves differently.
+ */
+export const isStaff: Permission = (context) => {
+  const user = context.user as { isStaff?: unknown; isSuperuser?: unknown } | null | undefined
+  return Boolean(user && (user.isStaff || user.isSuperuser))
+}
 
 /** Read-only for anonymous callers, full access once authenticated. */
-export const readOnlyOrAuthenticated: Permission = (context) =>
-  context.request?.method === 'GET' || context.request?.method === 'HEAD' || Boolean(context.user)
+export const readOnlyOrAuthenticated: Permission = (context) => {
+  const method = context.request?.method ?? 'GET'
+  return method === 'GET' || method === 'HEAD' || method === 'OPTIONS' || Boolean(context.user)
+}
 
 /** Inverts a permission. */
 export function not(permission: Permission): Permission {
   return async (context) => !(await permission(context))
 }
 
-/** Passes when any of the given permissions passes. */
-export function either(...permissions: Permission[]): Permission {
-  return async (context) => {
+/** Sets a function's name so a permission denial can report which gate refused. */
+function named(name: string, permission: Permission): Permission {
+  Object.defineProperty(permission, 'name', { value: name, configurable: true })
+  return permission
+}
+
+/** Passes only when every one of the given permissions passes (logical AND). */
+export function all(...permissions: Permission[]): Permission {
+  return named(`all(${permissions.map((p) => p.name || '?').join(', ')})`, async (context) => {
+    for (const permission of permissions) if (!(await permission(context))) return false
+    return true
+  })
+}
+
+/** Passes when any of the given permissions passes (logical OR). */
+export function any(...permissions: Permission[]): Permission {
+  return named(`any(${permissions.map((p) => p.name || '?').join(', ')})`, async (context) => {
     for (const permission of permissions) if (await permission(context)) return true
     return false
-  }
+  })
 }
+
+/** @deprecated Use {@link any}. Kept as an alias so existing code keeps working. */
+export const either = any
 
 export { APIError }

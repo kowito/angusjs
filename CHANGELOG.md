@@ -5,6 +5,26 @@ contain breaking changes; those are listed first in each entry.
 
 ## Unreleased
 
+### Changed — one canonical permission set (freeze-sensitive)
+
+`angusjs` and `angusjs/auth` shipped two `isStaff` implementations that
+disagreed: the auth one admitted a superuser, the root one denied a superuser
+who was not separately flagged staff. Same name, opposite answer, no type error
+to catch it. `readOnlyOrAuthenticated` was likewise duplicated. Since npm freezes
+the public API, this is fixed before launch rather than after.
+
+The base predicates and combinators now have a single home in `routing`;
+`angusjs/auth` re-exports them, so there is exactly one `isStaff` (which admits
+superusers) and one `readOnlyOrAuthenticated`. The combinator set is complete
+and consistent everywhere — `all`, `any`, `not` — with `either` kept as a
+deprecated alias of `any`. `all` and `any` are now exported from the root, which
+the docs had claimed but the module did not.
+
+The docs now say which predicates come from `angusjs` (those needing only
+`context.user`) versus `angusjs/auth` (`isSuperuser`, `hasRole`, `hasScope`, …),
+and the plugin docstring no longer references a `models()` helper that never
+existed.
+
 ### Fixed — the quick-start commands actually run
 
 The README told a new user to run `angus startproject`, but after `bun add

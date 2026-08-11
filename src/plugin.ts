@@ -8,8 +8,7 @@
  *
  * ```ts
  * new Elysia()
- *   .use(angus({ database, authenticate }))
- *   .use(models(Post, Author))
+ *   .use(angus({ database, models: [Post, Author], authenticate }))
  *   .use(mount('/posts', modelViewSet({ model: Post, serializer })))
  *   .listen(3000)
  * ```

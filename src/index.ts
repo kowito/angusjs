@@ -58,7 +58,9 @@ export type {
 
 // Routing
 export {
+  all,
   allowAny,
+  any,
   either,
   isAuthenticated,
   isStaff,
