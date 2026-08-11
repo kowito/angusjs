@@ -238,10 +238,10 @@ PORT=8000
   info('Next:')
   info(`  ${cyan(`cd ${name}`)}`)
   info(`  ${cyan('bun install')}`)
-  info(`  ${cyan('angus startapp blog')}       ${dim('# create your first app')}`)
-  info(`  ${cyan('angus makemigrations')}      ${dim('# generate the schema')}`)
-  info(`  ${cyan('angus migrate')}             ${dim('# apply it')}`)
-  info(`  ${cyan('angus runserver')}`)
+  info(`  ${cyan('bun run angus startapp blog')}   ${dim('# create your first app')}`)
+  info(`  ${cyan('bun run angus makemigrations')}  ${dim('# generate the schema')}`)
+  info(`  ${cyan('bun run angus migrate')}         ${dim('# apply it')}`)
+  info(`  ${cyan('bun run angus runserver')}`)
   return 0
 }
 
@@ -363,7 +363,7 @@ export default defineApp({
   }
 
   info('')
-  info(`Next: ${cyan('angus makemigrations')} and ${cyan('angus migrate')}.`)
+  info(`Next: ${cyan('bun run angus makemigrations')} and ${cyan('bun run angus migrate')}.`)
   info(dim(`Its models are already registered with the admin at /admin.`))
   return 0
 }

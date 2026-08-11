@@ -209,7 +209,7 @@ ${fieldBlock}
 
   if (what === 'model') {
     success(`Added the ${Model} model.`)
-    info(dim('  Run `angus makemigrations` to create the table.'))
+    info(dim('  Run `bun run angus makemigrations` to create the table.'))
     return 0
   }
 
@@ -274,8 +274,8 @@ admin.register(${Model}, {
 
   success(`Generated CRUD for ${bold(Model)}.`)
   info('')
-  info(`  ${cyan('angus makemigrations')}  ${dim('# create the table')}`)
-  info(`  ${cyan('angus migrate')}`)
-  info(`  ${cyan('angus routes')}          ${dim('# see the six new endpoints')}`)
+  info(`  ${cyan('bun run angus makemigrations')}  ${dim('# create the table')}`)
+  info(`  ${cyan('bun run angus migrate')}`)
+  info(`  ${cyan('bun run angus routes')}      ${dim('# see the six new endpoints')}`)
   return 0
 }

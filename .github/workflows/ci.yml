@@ -29,22 +29,28 @@ jobs:
         run: |
           bun link
           cd "$(mktemp -d)"
+          # `bunx angusjs` is exactly the pre-install command the README gives —
+          # it exercises the published bin resolution and shebang, not a direct
+          # path into the source, so a broken bin fails here rather than on a
+          # user's first run.
           bun "$GITHUB_WORKSPACE/src/cli/index.ts" startproject smoke
           cd smoke
           sed -i 's|"angusjs": "\^0.1.0"|"angusjs": "link:angusjs"|' package.json
           bun install
-          bun "$GITHUB_WORKSPACE/src/cli/index.ts" startapp thing
-          bun "$GITHUB_WORKSPACE/src/cli/index.ts" generate crud thing Widget name:string price:int
+
+          # Every command below runs the installed bin the way a user does.
+          bun run angus startapp thing
+          bun run angus generate crud thing Widget name:string price:int
 
           # `check` passing is not enough on its own: an app that exists on disk
           # but was never installed reports a perfectly clean project, because
           # from `check`'s point of view there is nothing there. Assert that the
           # models and routes actually arrived.
-          bun "$GITHUB_WORKSPACE/src/cli/index.ts" check | tee check.txt
+          bun run angus check | tee check.txt
           grep -q "2 model(s)" check.txt || { echo "app or model not registered"; exit 1; }
 
-          bun "$GITHUB_WORKSPACE/src/cli/index.ts" makemigrations
-          bun "$GITHUB_WORKSPACE/src/cli/index.ts" migrate
+          bun run angus makemigrations
+          bun run angus migrate
 
           # The generator appends code and imports to files it did not write, so
           # what matters is that the project still compiles afterwards.

@@ -5,6 +5,16 @@ contain breaking changes; those are listed first in each entry.
 
 ## Unreleased
 
+### Fixed — the quick-start commands actually run
+
+The README told a new user to run `angus startproject`, but after `bun add
+angusjs` the bin lives in `node_modules/.bin`, not on `PATH`, so the very first
+command was `command not found`. Every command now uses the form that works:
+`bunx angusjs …` before the project exists, `bun run angus …` inside it. The
+scaffold's own "Next:" output was corrected the same way, and CI now runs the
+smoke test through the installed bin rather than a path into the source — so a
+broken bin fails in CI instead of on a user's first run.
+
 ### Improved — validation errors read like sentences
 
 A 422 body is what a client renders beside a form field, and TypeBox's messages

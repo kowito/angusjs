@@ -37,7 +37,7 @@ export async function seed(project: LoadedProject, args: string[]): Promise<numb
     if (await Bun.file(path).exists()) throw new Error('seed.ts already exists.')
     await Bun.write(path, TEMPLATE)
     success('Created seed.ts')
-    info(dim('  Edit it, then run `angus seed`.'))
+    info(dim('  Edit it, then run `bun run angus seed`.'))
     return 0
   }
 

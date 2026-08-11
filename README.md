@@ -72,18 +72,20 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for where the boundary sits and why.
 Requires Bun 1.2+. There is no Node build — the ORM uses `bun:sqlite` and `Bun.SQL`.
 
 ```bash
-bun add angusjs drizzle-orm elysia
-bun add -d drizzle-kit
+# Create a project (bunx runs the CLI without a global install)
+bunx angusjs startproject myapi
+cd myapi && bun install
 ```
 
+From inside the project, the CLI runs through `bun run` — the `angus` bin lives
+in `node_modules/.bin`, not on your `PATH`:
+
 ```bash
-angus startproject myapi
-cd myapi && bun install
-angus startapp blog       # models, serializers, urls, admin
-angus generate crud blog Comment body:text post:fk=Blog
-angus makemigrations      # models -> SQL
-angus migrate             # SQL -> database
-angus runserver           # API, /docs, /admin, /mcp
+bun run angus startapp blog       # models, serializers, urls, admin
+bun run angus generate crud blog Comment body:text post:fk=Blog
+bun run angus makemigrations      # models -> SQL
+bun run angus migrate             # SQL -> database
+bun run angus runserver           # API, /docs, /admin, /mcp
 ```
 
 A complete worked example lives in [`examples/blog`](examples/blog).
