@@ -149,7 +149,7 @@ describe('the plugin surface', () => {
     self = app
 
     const response = await app.handle(
-      new Request('http://test/mcp', {
+      new Request('http://localhost/mcp', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),

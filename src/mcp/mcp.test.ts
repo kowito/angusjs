@@ -46,7 +46,7 @@ let app: Elysia<any, any>
 /** Sends a JSON-RPC message the way a legacy client would. */
 const rpc = async (message: unknown, headers: Record<string, string> = {}) => {
   const response = await app.handle(
-    new Request('http://test/mcp', {
+    new Request('http://localhost/mcp', {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...headers },
       body: JSON.stringify(message),
@@ -344,13 +344,13 @@ describe('transport rules', () => {
   })
 
   test('a same-origin POST is allowed', async () => {
-    const { status } = await rpc({ jsonrpc: '2.0', id: 1, method: 'tools/list' }, { origin: 'http://test' })
+    const { status } = await rpc({ jsonrpc: '2.0', id: 1, method: 'tools/list' }, { origin: 'http://localhost' })
     expect(status).toBe(200)
   })
 
   test('GET and DELETE are 405 — no SSE stream, no sessions', async () => {
     for (const method of ['GET', 'DELETE']) {
-      const response = await app.handle(new Request('http://test/mcp', { method }))
+      const response = await app.handle(new Request('http://localhost/mcp', { method }))
       expect(response.status).toBe(405)
     }
   })
@@ -380,7 +380,7 @@ describe('permissions are not bypassed', () => {
     const guardedApp = await createApp({ apps: [guarded], openapi: false }, { connectDatabase: false })
 
     const response = await guardedApp.handle(
-      new Request('http://test/mcp', {
+      new Request('http://localhost/mcp', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({

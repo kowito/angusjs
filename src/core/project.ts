@@ -152,6 +152,7 @@ function mcpRoutes(
   return mcpHttpRoutes({
     path: mcp.path ?? '/mcp',
     allowedOrigins: mcp.allowedOrigins,
+    allowedHosts: mcp.allowedHosts,
     permissions: mcp.permissions,
     context: (request) => ({
       app: app(),

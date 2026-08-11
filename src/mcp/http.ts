@@ -47,29 +47,97 @@ function json(body: unknown, status = 200): Response {
 export interface McpHttpOptions {
   path: string
   /**
-   * Origins permitted to call the endpoint, beyond the server's own. Validating
-   * `Origin` is required by the spec: without it a hostile page could use DNS
-   * rebinding to drive a local MCP server.
+   * Browser origins permitted to call the endpoint. A request that carries an
+   * `Origin` must match one of these (or `*`); a request without one — a
+   * non-browser client — is allowed through to the Host check below.
    */
   allowedOrigins?: readonly string[]
+  /**
+   * Host header values the endpoint answers to. Defaults to loopback only, plus
+   * the host of every `allowedOrigins` entry, so a public deployment is enabled
+   * by configuring the origin it serves. `*` disables the check.
+   */
+  allowedHosts?: readonly string[]
   permissions?: readonly Permission[]
   context: (request: Request) => DispatchContext
 }
 
-/** True when the request's Origin is absent (non-browser) or trusted. */
+const LOOPBACK = new Set(['localhost', '127.0.0.1', '::1', '[::1]'])
+
+/** The hostname of a `host` header or origin URL, without the port. */
+function hostnameOf(value: string): string {
+  const trimmed = value.trim()
+  // IPv6 literal: [::1]:8000 -> ::1
+  if (trimmed.startsWith('[')) return trimmed.slice(1, trimmed.indexOf(']'))
+  const colon = trimmed.lastIndexOf(':')
+  return colon === -1 ? trimmed : trimmed.slice(0, colon)
+}
+
+/**
+ * True when the request's `Origin` is absent (a non-browser client) or listed.
+ *
+ * The previous version also passed when `Origin.host === Host`, which is
+ * precisely the DNS-rebinding case: an attacker page at `evil.com` rebinds the
+ * name to `127.0.0.1`, so the browser sends `Origin` and `Host` that are equal
+ * and both attacker-controlled. That branch is gone; a present Origin must be
+ * on the allowlist.
+ */
 function originAllowed(request: Request, allowed: readonly string[]): boolean {
   const origin = request.headers.get('origin')
   if (!origin) return true
   if (allowed.includes('*') || allowed.includes(origin)) return true
+  // A same-origin local request — a browser UI served from the loopback host
+  // calling its own MCP endpoint — is safe: the Host check has already
+  // confirmed the request reached a loopback or configured host, so a rebinding
+  // page (Host: evil.com) never reaches this point.
   try {
-    return new URL(origin).host === new URL(request.url).host
+    return LOOPBACK.has(hostnameOf(new URL(origin).host))
   } catch {
     return false
   }
 }
 
+/**
+ * True when the request's `Host` is loopback or explicitly allowed.
+ *
+ * This is the actual DNS-rebinding defence: the rebinding browser sends
+ * `Host: evil.com` (the name it connected to), so restricting Host to loopback
+ * and the configured public hosts rejects the attack while leaving a genuine
+ * local or configured client working.
+ */
+function hostAllowed(request: Request, allowedHosts: Set<string>): boolean {
+  if (allowedHosts.has('*')) return true
+  // Bun.serve builds `request.url` from the Host header, so the two agree on a
+  // real request; the URL is the fallback for a synthetic `new Request()` that
+  // carries no Host header of its own.
+  let host = request.headers.get('host')
+  if (!host) {
+    try {
+      host = new URL(request.url).host
+    } catch {
+      return false
+    }
+  }
+  if (!host) return false
+  const name = hostnameOf(host)
+  return LOOPBACK.has(name) || allowedHosts.has(name)
+}
+
 export function mcpHttpRoutes(options: McpHttpOptions): Elysia<any, any> {
   const allowed = options.allowedOrigins ?? []
+
+  // Loopback, the explicitly configured hosts, and the host of every allowed
+  // origin — so setting `allowedOrigins` for a public deployment also lets that
+  // host's requests through without a second knob.
+  const allowedHosts = new Set<string>(options.allowedHosts ?? [])
+  for (const origin of allowed) {
+    if (origin === '*') { allowedHosts.add('*'); continue }
+    try {
+      allowedHosts.add(hostnameOf(new URL(origin).host))
+    } catch {
+      /* a non-URL origin ('*' handled above) contributes no host */
+    }
+  }
 
   const notAllowed = () =>
     json(
@@ -80,6 +148,13 @@ export function mcpHttpRoutes(options: McpHttpOptions): Elysia<any, any> {
   return new Elysia({ name: 'angus:mcp' })
     .post(options.path, async (context: Context) => {
       const request = context.request as Request
+
+      if (!hostAllowed(request, allowedHosts)) {
+        // The DNS-rebinding rejection. Kept deliberately terse — an attacker
+        // learns nothing, and a misconfigured operator finds the answer in the
+        // docs, not the error body.
+        return json(failure(null, JSON_RPC_ERRORS.invalidRequest, 'Host not allowed.'), 403)
+      }
 
       if (!originAllowed(request, allowed)) {
         return json(failure(null, JSON_RPC_ERRORS.invalidRequest, 'Origin not allowed.'), 403)

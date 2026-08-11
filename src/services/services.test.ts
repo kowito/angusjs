@@ -94,7 +94,8 @@ beforeAll(async () => {
   db = await testDatabase({ models: [Invoice] })
   const app = await createApp(settings, { connectDatabase: false })
   client = clientFor(app, { basePath: '/api' })
-  rootClient = clientFor(app)
+  // A loopback origin so the MCP endpoint's DNS-rebinding host check admits it.
+  rootClient = clientFor(app, { origin: 'http://localhost' })
 })
 
 afterAll(async () => {

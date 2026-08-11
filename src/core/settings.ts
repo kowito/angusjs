@@ -61,6 +61,8 @@ export interface McpSettings {
   readOnly?: boolean
   /** Origins allowed to call the endpoint, in addition to the server's own. */
   allowedOrigins?: readonly string[]
+  /** Host header values the endpoint answers to. Defaults to loopback plus the hosts of `allowedOrigins`. */
+  allowedHosts?: readonly string[]
   /** Gate the endpoint itself, on top of each route's own permissions. */
   permissions?: Permission[]
   /**
