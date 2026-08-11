@@ -28,6 +28,18 @@
 import { atomic } from './transaction.ts'
 import type { AnyModel, FieldMap, RowOf } from './model.ts'
 
+/**
+ * Coerces a stringified id back to a number when the target uses a numeric
+ * primary key, and leaves it a string when it does not. A join row is keyed
+ * on the target id, so a UUID primary key that `Number()` turned into `NaN`
+ * produced a filter that matched nothing — `set()` then kept links it was
+ * asked to remove.
+ */
+function toId(id: string): number | string {
+  const numeric = Number(id)
+  return Number.isNaN(numeric) ? id : numeric
+}
+
 export interface ManyToManyConfig<From extends AnyModel, To extends AnyModel, Through extends AnyModel> {
   from: From
   to: To
@@ -175,7 +187,7 @@ export function manyToMany<From extends AnyModel, To extends AnyModel, Through e
         const rows = missing.map((id) => ({
           ...extra,
           [fromField]: ownerId,
-          [toField]: Number.isNaN(Number(id)) ? id : Number(id),
+          [toField]: toId(id),
         }))
 
         await through.objects.bulkCreate(rows as never[])
@@ -210,7 +222,7 @@ export function manyToMany<From extends AnyModel, To extends AnyModel, Through e
 
         if (toRemove.length > 0) {
           await through.objects
-            .filter({ [`${fromField}Id`]: ownerId, [`${toField}Id__in`]: toRemove.map(Number) } as never)
+            .filter({ [`${fromField}Id`]: ownerId, [`${toField}Id__in`]: toRemove.map(toId) } as never)
             .delete()
         }
 
@@ -219,7 +231,7 @@ export function manyToMany<From extends AnyModel, To extends AnyModel, Through e
             toAdd.map((id) => ({
               ...extra,
               [fromField]: ownerId,
-              [toField]: Number.isNaN(Number(id)) ? id : Number(id),
+              [toField]: toId(id),
             })) as never[],
           )
         }
