@@ -136,20 +136,29 @@ export interface HealthOptions {
   version?: string
 }
 
-/** Confirms the database answers a trivial query. */
+/**
+ * Confirms the database answers a trivial query.
+ *
+ * Branches on dialect on purpose. The bun-sqlite Drizzle driver has no
+ * `execute`, so the previous `db.execute?.(…)` was `undefined`, `await
+ * undefined` never threw, and the probe reported healthy without ever touching
+ * the database — a broken or locked SQLite file stayed in the load-balancer
+ * pool. Each dialect now runs a query that actually throws when it cannot reach
+ * the database.
+ */
 async function databaseReachable(): Promise<boolean> {
   if (!hasConnection()) return false
+  const connection = getConnection()
   try {
-    await getConnection().db.execute?.(sql`select 1`)
+    if (connection.dialect === 'sqlite') {
+      // Synchronous, and throws on a locked or corrupt database.
+      connection.client.query('select 1').get()
+    } else {
+      await connection.db.execute(sql`select 1`)
+    }
     return true
   } catch {
-    try {
-      // The SQLite driver exposes `run` rather than `execute`.
-      getConnection().client.query('select 1').get()
-      return true
-    } catch {
-      return false
-    }
+    return false
   }
 }
 
