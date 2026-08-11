@@ -223,8 +223,25 @@ export function serializer<
   }
   for (const [name, field] of Object.entries(computed)) readProperties[name] = field.schema
 
+  // A foreign key reads as `<attr>Id` but writes as `<attr>`. Left alone, that
+  // asymmetry breaks the most ordinary edit flow there is: GET a record, change
+  // a field, PUT it back — the echoed `authorId` satisfies nothing and the
+  // required `author` is missing, so the round-trip 422s. So a foreign key
+  // accepts its value under either key. Both are optional at the schema level;
+  // `toInternal` enforces that a required relation arrives under one of them.
+  const writeAliases = new Map<string, string>() // authorId -> author
   const writeProperties: Record<string, TSchema> = {}
-  for (const attr of writeFields) writeProperties[attr] = fieldSchema(model.fields[attr]!.spec, 'write')
+  for (const attr of writeFields) {
+    const spec = model.fields[attr]!.spec
+    if (spec.kind === 'foreignKey') {
+      const idKey = `${attr}Id`
+      writeProperties[attr] = t.Optional(fieldSchema(spec, 'write'))
+      writeProperties[idKey] = t.Optional(fieldSchema(spec, 'write'))
+      writeAliases.set(idKey, attr)
+    } else {
+      writeProperties[attr] = fieldSchema(spec, 'write')
+    }
+  }
 
   // PascalCase, because these names become OpenAPI component names and, from
   // there, the type names in whatever client is generated from the document.
@@ -296,8 +313,11 @@ export function serializer<
       for (const [key, value] of Object.entries(source)) {
         // Read-only and unknown keys are dropped rather than rejected, so a
         // client can echo a full response body back into a PATCH unchanged.
-        if (!writeFields.includes(key)) continue
-        internal[key] = value
+        // `authorId` maps onto the `author` field; an explicit `author` wins
+        // over the id alias when a body somehow carries both.
+        const attr = writeFields.includes(key) ? key : writeAliases.get(key)
+        if (!attr) continue
+        if (key === attr || internal[attr] === undefined) internal[attr] = value
       }
 
       for (const attr of writeFields) {
