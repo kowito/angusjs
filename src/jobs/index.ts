@@ -292,6 +292,8 @@ export interface WorkerOptions {
   /** Stop after this many jobs. For tests and one-shot runs. */
   maxJobs?: number
   onResult?: (result: RunResult) => void
+  /** Called when a poll itself fails (a dropped connection, a locked db). The worker logs and keeps going regardless. */
+  onError?: (error: unknown) => void
   signal?: AbortSignal
 }
 
@@ -321,17 +323,28 @@ export function startWorker(options: WorkerOptions = {}): Worker {
 
   const loop = async (): Promise<void> => {
     while (!shouldStop()) {
-      const claimed = await claimJob(workerId)
+      try {
+        const claimed = await claimJob(workerId)
 
-      if (!claimed) {
-        // Idle: wait before asking again rather than spinning on the database.
+        if (!claimed) {
+          // Idle: wait before asking again rather than spinning on the database.
+          await Bun.sleep(pollIntervalMs)
+          continue
+        }
+
+        processed++
+        const result = await runJob(claimed)
+        options.onResult?.(result)
+      } catch (error) {
+        // A transient failure — a dropped connection, "database is locked", a
+        // failover — must not terminate the worker. Without this the loop
+        // promise rejected on the first such error and the worker silently
+        // stopped claiming jobs while the process stayed healthy. Log, back
+        // off, and keep polling; `shouldStop()` remains the only way out.
+        options.onError?.(error)
+        console.error(`[angus] worker ${workerId} poll failed, retrying:`, error)
         await Bun.sleep(pollIntervalMs)
-        continue
       }
-
-      processed++
-      const result = await runJob(claimed)
-      options.onResult?.(result)
     }
   }
 

@@ -34,13 +34,26 @@ export interface CacheStore {
   clear(): Promise<void> | void
 }
 
-/** Per-process entries with lazy expiry. */
+/**
+ * Per-process entries with lazy expiry and a bounded size.
+ *
+ * The bound is what makes it safe to point a response cache at untrusted query
+ * strings. Expiry alone is not enough: a crawler requesting `?page=1`, `?page=2`,
+ * … or randomised parameters creates a distinct entry every time, and within a
+ * single TTL window that is unbounded growth to OOM. Past `maxEntries` the
+ * least-recently-used entry is evicted.
+ */
 export class MemoryCacheStore implements CacheStore {
   readonly name = 'memory'
   private readonly entries = new Map<string, CacheEntry>()
   /** tag -> keys, so invalidation is a lookup rather than a scan. */
   private readonly byTag = new Map<string, Set<string>>()
   private lastSweep = 0
+  private readonly maxEntries: number
+
+  constructor(options: { maxEntries?: number } = {}) {
+    this.maxEntries = Math.max(1, options.maxEntries ?? 10_000)
+  }
 
   get<T>(key: string): T | undefined {
     const entry = this.entries.get(key)
@@ -51,6 +64,10 @@ export class MemoryCacheStore implements CacheStore {
       return undefined
     }
 
+    // Move to the end so it is evicted last — a Map keeps insertion order, so
+    // the oldest live key is always the first one out.
+    this.entries.delete(key)
+    this.entries.set(key, entry)
     return entry.value as T
   }
 
@@ -63,6 +80,13 @@ export class MemoryCacheStore implements CacheStore {
       const keys = this.byTag.get(tag) ?? new Set<string>()
       keys.add(key)
       this.byTag.set(tag, keys)
+    }
+
+    // Evict the least-recently-used entries until back within the cap.
+    while (this.entries.size > this.maxEntries) {
+      const oldest = this.entries.keys().next().value
+      if (oldest === undefined) break
+      this.forget(oldest)
     }
   }
 
@@ -124,6 +148,8 @@ export interface CacheSettings {
   defaultTtlSeconds?: number
   /** Prefix on every key — useful when several apps share a store. */
   prefix?: string
+  /** Cap on the in-memory store's entries before LRU eviction. Defaults to 10,000. */
+  maxEntries?: number
 }
 
 export interface SetOptions {
@@ -146,7 +172,7 @@ export interface Cache {
 }
 
 export function createCache(settings: CacheSettings = {}): Cache {
-  const store = settings.store ?? new MemoryCacheStore()
+  const store = settings.store ?? new MemoryCacheStore({ maxEntries: settings.maxEntries })
   const defaultTtl = settings.defaultTtlSeconds ?? 300
   const prefix = settings.prefix ?? ''
 
