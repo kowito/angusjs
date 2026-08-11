@@ -14,6 +14,7 @@
 import { router, type Router } from '../routing/router.ts'
 import { issueCredential } from './credentials.ts'
 import {
+  assertProviderConfig,
   beginAuthorization,
   exchangeCode,
   fetchProfile,
@@ -24,7 +25,7 @@ import {
   type ProviderConfig,
 } from './oauth.ts'
 import { resolveSocialUser, SocialLoginError, type SocialLoginOptions } from './social.ts'
-import { SESSION_COOKIE } from './app.ts'
+import { isSecureRequest, SESSION_COOKIE } from './app.ts'
 
 const FLOW_COOKIE = 'angus_oauth_flow'
 
@@ -96,13 +97,17 @@ function readCookie(request: Request, name: string): string | null {
 export function socialAuthRoutes(options: SocialAuthOptions): Router {
   const prefix = options.prefix ?? '/auth'
   const ttl = options.sessionTtlSeconds ?? 60 * 60 * 24 * 14
-  const secure = options.secureCookies ?? Bun.env.NODE_ENV === 'production'
+  const secureFor = (request: Request) => options.secureCookies ?? isSecureRequest(request)
   const successRedirect = options.successRedirect ?? '/'
   const failureRedirect = options.failureRedirect ?? '/login'
 
   if (options.secret.length < 32) {
     throw new Error('socialAuthRoutes: `secret` must be at least 32 characters.')
   }
+
+  // Fail at startup, not at the first callback, if a provider would skip issuer
+  // validation.
+  for (const provider of options.providers) assertProviderConfig(provider)
 
   const byName = new Map(options.providers.map((provider) => [provider.name, provider]))
   const routes = router()
@@ -122,7 +127,7 @@ export function socialAuthRoutes(options: SocialAuthOptions): Router {
         context.set.headers.location = url
         // Five minutes: long enough to sign in at the provider, short enough
         // that a stolen cookie is rarely still usable.
-        context.set.headers['set-cookie'] = cookie(FLOW_COOKIE, await sealFlowState(flow, options.secret), 300, secure)
+        context.set.headers['set-cookie'] = cookie(FLOW_COOKIE, await sealFlowState(flow, options.secret), 300, secureFor(context.request))
         return null
       },
       {
@@ -142,7 +147,7 @@ export function socialAuthRoutes(options: SocialAuthOptions): Router {
           context.set.headers.location = `${failureRedirect}?error=${encodeURIComponent(reason)}`
           // Always clear the flow cookie, whatever happened: leaving a used
           // one behind lets a replay be attempted against it.
-          context.set.headers['set-cookie'] = cookie(FLOW_COOKIE, '', 0, secure)
+          context.set.headers['set-cookie'] = cookie(FLOW_COOKIE, '', 0, secureFor(context.request))
           return null
         }
 
@@ -174,8 +179,8 @@ export function socialAuthRoutes(options: SocialAuthOptions): Router {
           context.set.status = 302
           context.set.headers.location = safeRedirect(flow.next, successRedirect)
           context.set.headers['set-cookie'] = [
-            cookie(SESSION_COOKIE, credential.secret, ttl, secure),
-            cookie(FLOW_COOKIE, '', 0, secure),
+            cookie(SESSION_COOKIE, credential.secret, ttl, secureFor(context.request)),
+            cookie(FLOW_COOKIE, '', 0, secureFor(context.request)),
           ] as never
           return null
         } catch (error) {

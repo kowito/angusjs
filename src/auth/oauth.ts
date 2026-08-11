@@ -95,16 +95,39 @@ export const providers = {
     scopes: ['read:user', 'user:email'],
   }),
 
-  microsoft: (clientId: string, clientSecret: string, tenant = 'common'): ProviderConfig => ({
+  /**
+   * `tenant` is required, not `'common'`. A single directory (its GUID, or a
+   * verified domain) pins the issuer so the ID token's `iss` can be checked;
+   * `'common'` accepts a sign-in from any Azure AD tenant, including one an
+   * attacker provisions, and cannot validate a fixed issuer. Multi-tenant apps
+   * must instead validate the `tid` claim themselves.
+   */
+  microsoft: (clientId: string, clientSecret: string, tenant: string): ProviderConfig => ({
     name: 'microsoft',
     clientId,
     clientSecret,
     authorizationEndpoint: `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/authorize`,
     tokenEndpoint: `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`,
     jwksUri: `https://login.microsoftonline.com/${tenant}/discovery/v2.0/keys`,
+    issuer: `https://login.microsoftonline.com/${tenant}/v2.0`,
     scopes: ['openid', 'email', 'profile'],
   }),
 } as const
+
+/**
+ * Rejects a provider that verifies ID tokens against a JWKS but never checks
+ * who issued them. Without the issuer, any provider whose signature is in that
+ * JWKS — or a token minted under a different tenant of the same provider — is
+ * accepted, which is how a "sign in with X" turns into "sign in as anyone".
+ */
+export function assertProviderConfig(provider: ProviderConfig): void {
+  if (provider.jwksUri && !provider.issuer) {
+    throw new Error(
+      `Provider "${provider.name}" sets jwksUri but no issuer. The ID token's issuer would ` +
+        `never be validated. Set \`issuer\`, or for Microsoft pass a specific tenant rather than 'common'.`,
+    )
+  }
+}
 
 // ---------------------------------------------------------------------------
 // PKCE and state
@@ -289,6 +312,7 @@ export async function fetchProfile(
   fetchImpl: typeof fetch = fetch,
 ): Promise<ProviderProfile> {
   if (provider.jwksUri && tokens.id_token) {
+    assertProviderConfig(provider)
     const jwks = await fetchJwks(provider.jwksUri, fetchImpl)
     const claims = await verifyJwtWithJwks(tokens.id_token, jwks, {
       issuer: provider.issuer,

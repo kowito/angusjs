@@ -44,6 +44,7 @@ export { decodeJwt, JwtError, signJwt, verifyJwt, verifyJwtWithJwks } from './jw
 export type { Algorithm, Jwk, JwtClaims, SignOptions, VerifyOptions } from './jwt.ts'
 
 export {
+  assertProviderConfig,
   beginAuthorization,
   exchangeCode,
   fetchJwks,

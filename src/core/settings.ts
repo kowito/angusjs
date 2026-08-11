@@ -8,6 +8,7 @@
 
 import type { Elysia } from 'elysia'
 import type { DatabaseConfig } from '../db/connection.ts'
+import { isDevelopment } from './errors.ts'
 import type { AuditSink } from '../mcp/audit.ts'
 import type { ToolPolicy } from '../mcp/policy.ts'
 import type { RealtimeOptions } from '../realtime/index.ts'
@@ -117,7 +118,7 @@ export interface Settings {
    * are empty.
    */
   tracing?: TracingOptions | false
-  /** Includes stack traces in 500 responses. Defaults to `NODE_ENV !== 'production'`. */
+  /** Includes stack traces in 500 responses. Defaults on only when NODE_ENV is `development` or `test`. */
   debug?: boolean
   /** Where migration SQL lives, relative to the project root. Defaults to `migrations`. */
   migrationsDir?: string
@@ -186,7 +187,7 @@ export function resolveSettings(settings: Settings): ResolvedSettings {
     },
     prefix: settings.prefix ?? '',
     middleware: settings.middleware ?? [],
-    debug: settings.debug ?? Bun.env.NODE_ENV !== 'production',
+    debug: settings.debug ?? isDevelopment(),
     migrationsDir: settings.migrationsDir ?? 'migrations',
   }
 }

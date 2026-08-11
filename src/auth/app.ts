@@ -88,6 +88,25 @@ export async function authenticate(context: Context): Promise<unknown> {
   return resolved.user
 }
 
+/**
+ * Whether a request arrived over HTTPS.
+ *
+ * The correct source for the cookie `Secure` flag — a cookie should be Secure
+ * exactly when the connection carrying it is encrypted, on every deploy,
+ * without consulting `NODE_ENV`. An unset variable on a TLS deploy would
+ * otherwise ship the session token without `Secure`, so any plaintext hop
+ * exposes it. Honours `x-forwarded-proto` for the common TLS-terminating proxy.
+ */
+export function isSecureRequest(request: Request | undefined): boolean {
+  const forwarded = request?.headers.get('x-forwarded-proto')
+  if (forwarded) return forwarded.split(',')[0]!.trim() === 'https'
+  try {
+    return request ? new URL(request.url).protocol === 'https:' : false
+  } catch {
+    return false
+  }
+}
+
 function sessionCookie(secret: string, maxAgeSeconds: number, secure: boolean): string {
   const parts = [
     `${SESSION_COOKIE}=${encodeURIComponent(secret)}`,
@@ -113,7 +132,7 @@ export interface AuthAppOptions {
   allowRegistration?: boolean
   /** Session lifetime in seconds. Defaults to two weeks. */
   sessionTtlSeconds?: number
-  /** Adds `Secure` to the cookie. Defaults to on outside development. */
+  /** Force the cookie `Secure` flag. Defaults to following the request scheme — Secure over HTTPS, not over local HTTP. */
   secureCookies?: boolean
   /**
    * Overrides delivery of the reset link. By default the configured email
@@ -141,7 +160,7 @@ export interface AuthAppOptions {
 export function authApp(options: AuthAppOptions = {}): AngusApp {
   const prefix = options.prefix ?? '/auth'
   const ttl = options.sessionTtlSeconds ?? 60 * 60 * 24 * 14
-  const secure = options.secureCookies ?? Bun.env.NODE_ENV === 'production'
+  const secureFor = (request: Request | undefined) => options.secureCookies ?? isSecureRequest(request)
   const adminPath = options.adminPath ?? '/admin'
 
   const credentials = t.Object({
@@ -161,13 +180,13 @@ export function authApp(options: AuthAppOptions = {}): AngusApp {
       summary: 'Sign in with an email and password',
       name: 'auth-login',
       tags: ['auth'],
-      async handler({ body, set }) {
+      async handler({ body, set, request }) {
         const user = await verifyCredentials(body.email, body.password)
         // One message for every failure: distinguishing them enumerates accounts.
         if (!user) throw new Unauthorized('Incorrect email address or password.')
 
         const { secret } = await issueCredential(user, { kind: 'session', ttlSeconds: ttl })
-        set.headers['set-cookie'] = sessionCookie(secret, ttl, secure)
+        set.headers['set-cookie'] = sessionCookie(secret, ttl, secureFor(request))
 
         return { token: secret, user: await UserSerializer.toRepresentation(user) }
       },
@@ -216,13 +235,13 @@ export function authApp(options: AuthAppOptions = {}): AngusApp {
         summary: 'Create an account',
         name: 'auth-register',
         tags: ['auth'],
-        async handler({ body, set }) {
+        async handler({ body, set, request }) {
           const existing = await User.objects.getOrNull({ email: body.email.trim().toLowerCase() })
           if (existing) throw new BadRequest('That email address is already registered.')
 
           const user = await createUser({ email: body.email, password: body.password, name: body.name })
           const { secret } = await issueCredential(user, { kind: 'session', ttlSeconds: ttl })
-          set.headers['set-cookie'] = sessionCookie(secret, ttl, secure)
+          set.headers['set-cookie'] = sessionCookie(secret, ttl, secureFor(request))
           set.status = 201
 
           return { token: secret, user: await UserSerializer.toRepresentation(user) }
@@ -398,7 +417,7 @@ export function authApp(options: AuthAppOptions = {}): AngusApp {
  */
 export function adminAuthApp(options: AuthAppOptions = {}): AngusApp {
   const ttl = options.sessionTtlSeconds ?? 60 * 60 * 24 * 14
-  const secure = options.secureCookies ?? Bun.env.NODE_ENV === 'production'
+  const secureFor = (request: Request | undefined) => options.secureCookies ?? isSecureRequest(request)
   const adminPath = options.adminPath ?? '/admin'
   const routes = router()
 
@@ -455,7 +474,7 @@ main.signin p.sub { color: var(--muted); margin: 0 0 20px; }
 
       const { secret } = await issueCredential(user, { kind: 'session', ttlSeconds: ttl })
       const response = seeOther(adminPath)
-      response.headers.set('set-cookie', sessionCookie(secret, ttl, secure))
+      response.headers.set('set-cookie', sessionCookie(secret, ttl, secureFor(request)))
       return response
     },
     { hidden: true, name: 'admin-login-submit' },

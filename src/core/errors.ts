@@ -14,6 +14,12 @@ import { classifyIntegrityError, constraintField, DoesNotExist, MultipleObjectsR
 import { APIError, NotFound, ServerError, type ErrorBody } from '../http/errors.ts'
 import { ValidationError } from '../serializers/index.ts'
 
+/** True only when NODE_ENV positively names a development or test environment. */
+export function isDevelopment(): boolean {
+  const env = Bun.env.NODE_ENV
+  return env === 'development' || env === 'test'
+}
+
 /**
  * Stable machine-readable codes. Clients branch on these; the human-readable
  * `detail` is free to change wording without breaking anyone.
@@ -81,7 +87,10 @@ export interface ErrorTranslationOptions {
  * reject a payload, and all three arrive as the right status and shape.
  */
 export function errorTranslation(options: ErrorTranslationOptions = {}): Elysia<any, any> {
-  const debug = options.debug ?? Bun.env.NODE_ENV !== 'production'
+  // A positive development signal, never the mere absence of a production one:
+  // an unset or misspelled NODE_ENV on a real deploy must not turn stack-trace
+  // disclosure on. The server still logs the full error regardless.
+  const debug = options.debug ?? isDevelopment()
 
   const plugin = new Elysia({ name: 'angus:errors' }).onError({ as: 'global' }, ({ code, error, set }) => {
     // A permission or handler may short-circuit with a Response of its own.
