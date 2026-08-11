@@ -110,6 +110,8 @@ throw new ValidationError({ email: ['Already taken.'] })
 
 `DoesNotExist` from the ORM becomes 404. A serializer `ValidationError` becomes 400. A constraint violation becomes 409 or 400 — a duplicate or a bad foreign key comes from the submitted data, so it belongs to the caller rather than being reported as a server fault.
 
+A schema validation failure (422) returns per-field messages written for a person: `must be between 0 and 100`, `must be at most 5 characters`, `must be one of: active, archived` — reconstructed from the field's own constraint, not TypeBox's structural wording.
+
 A handler never builds an error body by hand.
 
 ## Serializers

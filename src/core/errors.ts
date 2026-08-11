@@ -145,11 +145,16 @@ export function errorTranslation(options: ErrorTranslationOptions = {}): Elysia<
     // Elysia's own schema validation.
     if (code === 'VALIDATION') {
       set.status = 422
-      const validation = error as unknown as { all?: { path?: string; message?: string }[]; message: string }
+      const validation = error as unknown as {
+        all?: { path?: string; message?: string; schema?: SchemaLike }[]
+        message: string
+      }
       const errors: Record<string, string[]> = {}
       for (const issue of validation.all ?? []) {
         const field = (issue.path ?? '').replace(/^\//, '') || 'detail'
-        ;(errors[field] ??= []).push(issue.message ?? 'Invalid value.')
+        // Prefer a sentence reconstructed from the schema's real constraint over
+        // TypeBox's structural message, which names the shape, not the rule.
+        ;(errors[field] ??= []).push(describeConstraint(issue.schema, issue.message ?? 'Invalid value.'))
       }
       return {
         error: 'ValidationError',
@@ -182,6 +187,85 @@ export function errorTranslation(options: ErrorTranslationOptions = {}): Elysia<
 }
 
 /** Keeps a custom `code` if one was set, otherwise derives it from the status. */
+/** The constraint-bearing shape of a TypeBox schema, as far as this needs it. */
+interface SchemaLike {
+  type?: string
+  format?: string
+  minimum?: number
+  maximum?: number
+  minLength?: number
+  maxLength?: number
+  pattern?: string
+  enum?: unknown[]
+  const?: unknown
+  anyOf?: SchemaLike[]
+}
+
+/**
+ * Turns a validation issue into a sentence a person can act on.
+ *
+ * TypeBox reports the failure structurally — "Expected union value", "Expected
+ * string length greater or equal to 3" — which is accurate and nearly useless
+ * to whoever sent the request. But the schema it hands over carries the actual
+ * constraint, so the useful sentence can be reconstructed from that.
+ *
+ * The union case is the one that matters most: a numeric field coerces through
+ * `anyOf: [string, number]` so a form's `"3"` is accepted, and a bound
+ * violation on it reports only "Expected union value". The real `minimum` lives
+ * on the union wrapper and on its number member, so it is recoverable.
+ *
+ * Returns null when nothing better than the original can be said.
+ */
+/** The literal values of an `anyOf` of consts, or null if it is not one. */
+function collectConsts(members: SchemaLike[] | undefined): unknown[] | null {
+  if (!members || members.length === 0) return null
+  const values = members.map((member) => member.const)
+  return values.every((value) => value !== undefined) ? values : null
+}
+
+export function describeConstraint(schema: SchemaLike | undefined, fallback: string): string {
+  if (!schema) return fallback
+
+  // Flatten a coercing union onto its wrapper, so `minimum` on either surfaces.
+  const merged: SchemaLike = { ...schema }
+  for (const member of schema.anyOf ?? []) {
+    for (const key of ['minimum', 'maximum', 'minLength', 'maxLength', 'format', 'pattern'] as const) {
+      if (merged[key] === undefined && member[key] !== undefined) (merged as Record<string, unknown>)[key] = member[key]
+    }
+  }
+
+  if (merged.format === 'email') return 'must be a valid email address'
+  if (merged.format === 'uri') return 'must be a valid URL'
+  if (merged.format === 'uuid') return 'must be a valid UUID'
+  if (merged.format === 'date-time') return 'must be a valid date and time'
+  if (merged.format === 'date') return 'must be a valid date'
+
+  // Choices compile to a union of literals (`anyOf: [{const:'a'}, …]`) rather
+  // than an `enum`, so gather the allowed values from either shape.
+  const allowed = merged.enum ?? collectConsts(schema.anyOf)
+  if (allowed && allowed.length > 0) return `must be one of: ${allowed.join(', ')}`
+
+  if (merged.minimum !== undefined && merged.maximum !== undefined) {
+    return `must be between ${merged.minimum} and ${merged.maximum}`
+  }
+  if (merged.minimum !== undefined) return `must be at least ${merged.minimum}`
+  if (merged.maximum !== undefined) return `must be at most ${merged.maximum}`
+
+  if (merged.minLength !== undefined && merged.maxLength !== undefined) {
+    return `must be between ${merged.minLength} and ${merged.maxLength} characters`
+  }
+  if (merged.maxLength !== undefined) return `must be at most ${merged.maxLength} characters`
+  if (merged.minLength !== undefined) return `must be at least ${merged.minLength} characters`
+
+  if (merged.pattern !== undefined) return 'is not in the expected format'
+
+  // A wrapper union with no legible constraint of its own — "Expected union
+  // value" — is still noise. Say the field is required/invalid plainly.
+  if (fallback === 'Expected union value') return 'is not a valid value'
+
+  return fallback
+}
+
 function normaliseCode(error: APIError, body: ErrorBody): string {
   return body.code && body.code !== error.name ? body.code : codeForStatus(error.status)
 }

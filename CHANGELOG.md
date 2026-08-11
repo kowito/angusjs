@@ -5,6 +5,30 @@ contain breaking changes; those are listed first in each entry.
 
 ## Unreleased
 
+### Improved — validation errors read like sentences
+
+A 422 body is what a client renders beside a form field, and TypeBox's messages
+described the shape rather than the rule: a number below its minimum came back as
+`Expected union value`, a too-long string as `Expected string length less or
+equal to 5`. The schema TypeBox hands over carries the real constraint, so the
+message is now reconstructed from it:
+
+| Field | Before | After |
+| --- | --- | --- |
+| `qty: -3` (min 0, max 100) | Expected union value | must be between 0 and 100 |
+| `name` too long | Expected string length less or equal to 5 | must be at most 5 characters |
+| `email` | Expected string to match 'email' format | must be a valid email address |
+| a bad choice | Expected union value | must be one of: active, archived |
+
+The union case was the one that hid the most: a numeric field coerces through
+`anyOf: [string, number]` so a form's `"3"` is accepted, and the bound violation
+surfaced only as the union failure. The constraint lives on the wrapper, so it
+is recoverable. Where nothing legible is on the schema, the original message
+still stands — this only ever improves a message, never removes information.
+
+This is entirely in the error-translation layer; no schema changed, so nothing
+about validation itself moved.
+
 ### Improved — query errors point at the real mistake
 
 A filter built dynamically — from a query string, or cast past the typed keys —
