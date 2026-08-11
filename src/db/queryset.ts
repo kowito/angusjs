@@ -9,7 +9,7 @@
 import { asc, avg, count as countAgg, desc, eq, max as maxAgg, min as minAgg, sql, sum, type SQL } from 'drizzle-orm'
 import { getConnection, type Connection } from './connection.ts'
 import { isFExpression } from './expressions.ts'
-import { activeDb } from './transaction.ts'
+import { activeDb, transactionGate } from './transaction.ts'
 import { hasHooks, runHooks } from './hooks.ts'
 import { attachPrefetches, resolvePrefetch, type PrefetchMap, type PrefetchResult, type ResolvedPrefetch } from './prefetch.ts'
 import { DoesNotExist, MultipleObjectsReturned } from './errors.ts'
@@ -332,8 +332,10 @@ export class QuerySet<M extends AnyModel, R = RowOf<M>> implements PromiseLike<R
   // -------------------------------------------------------------------------
 
   async execute(): Promise<R[]> {
+    const connection = getConnection()
+    await transactionGate(connection)
     const rows = (await traceQuery('select', this.model.meta.tableName, undefined, () =>
-      this.compile(getConnection()),
+      this.compile(connection),
     )) as R[]
 
     if (this.state.prefetch.length > 0) {
@@ -386,6 +388,7 @@ export class QuerySet<M extends AnyModel, R = RowOf<M>> implements PromiseLike<R
 
   async count(): Promise<number> {
     const connection = getConnection()
+    await transactionGate(connection)
     const ctx = this.context(connection)
     let query = activeDb(connection)
       .select({ value: countAgg() })
@@ -405,6 +408,7 @@ export class QuerySet<M extends AnyModel, R = RowOf<M>> implements PromiseLike<R
   /** `aggregate({ total: 'sum:amount', oldest: 'min:createdAt' })` */
   async aggregate<S extends Record<string, AggregateSpec<M>>>(spec: S): Promise<Record<keyof S, number | null>> {
     const connection = getConnection()
+    await transactionGate(connection)
     const ctx = this.context(connection)
     const table = connection.table(this.model)
 
@@ -452,6 +456,7 @@ export class QuerySet<M extends AnyModel, R = RowOf<M>> implements PromiseLike<R
     spec: S,
   ): Promise<(Pick<R, K> & Record<keyof S, number | null>)[]> {
     const connection = getConnection()
+    await transactionGate(connection)
     const ctx = this.context(connection)
     const table = connection.table(this.model)
 
@@ -582,6 +587,7 @@ export class QuerySet<M extends AnyModel, R = RowOf<M>> implements PromiseLike<R
   async bulkCreate(rows: InsertOf<M>[]): Promise<RowOf<M>[]> {
     if (rows.length === 0) return []
     const connection = getConnection()
+    await transactionGate(connection)
     const table = connection.table(this.model)
 
     const values = rows.map((row) => this.toColumns(row as Record<string, unknown>, 'insert'))
@@ -607,6 +613,7 @@ export class QuerySet<M extends AnyModel, R = RowOf<M>> implements PromiseLike<R
   /** Updates every matching row. Returns the updated rows. */
   async update(data: UpdateOf<M>): Promise<RowOf<M>[]> {
     const connection = getConnection()
+    await transactionGate(connection)
     const ctx = this.context(connection)
     const table = connection.table(this.model)
     const values = this.toColumns(data as Record<string, unknown>, 'update', table)
@@ -632,6 +639,7 @@ export class QuerySet<M extends AnyModel, R = RowOf<M>> implements PromiseLike<R
   /** Deletes every matching row. Returns how many went. */
   async delete(): Promise<number> {
     const connection = getConnection()
+    await transactionGate(connection)
     const ctx = this.context(connection)
     const table = connection.table(this.model)
 

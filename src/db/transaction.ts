@@ -45,6 +45,55 @@ export function inTransaction(): boolean {
   return scope.getStore() !== undefined
 }
 
+/**
+ * On SQLite, transactions live on the single shared connection, so a
+ * transaction opened by one request is physically open for every other. Two
+ * guarantees make that safe:
+ *
+ *   1. Only one `atomic()` block runs at a time (the mutex below), so a second
+ *      overlapping transaction never issues a nested `BEGIN` — which SQLite
+ *      rejects outright — and two transactions can never interleave writes.
+ *   2. A query issued *outside* any transaction waits while one is open, so it
+ *      cannot be swept into a transaction it knows nothing about and discarded
+ *      when that transaction rolls back.
+ *
+ * `held` maps a connection to the promise that resolves when its current
+ * transaction finishes; absent means none is open.
+ */
+const held = new WeakMap<Connection, Promise<void>>()
+
+/**
+ * Awaited by every non-transactional query before it touches SQLite, so it runs
+ * only when no transaction is open. A no-op on Postgres (pooled connections
+ * isolate transactions already) and for the transaction's own queries, which
+ * must not wait on the lock they hold.
+ */
+export async function transactionGate(connection: Connection): Promise<void> {
+  if (connection.dialect !== 'sqlite' || inTransaction()) return
+  const current = held.get(connection)
+  if (current) await current
+}
+
+/**
+ * Waits for any in-progress transaction on this connection, then claims the
+ * lock. The check-and-set is synchronous, so two callers cannot both see it
+ * free; waiters wake in FIFO order and re-check.
+ */
+async function acquireTransaction(connection: Connection): Promise<() => void> {
+  let current: Promise<void> | undefined
+  while ((current = held.get(connection))) await current
+
+  let release!: () => void
+  const done = new Promise<void>((resolve) => {
+    release = () => {
+      held.delete(connection)
+      resolve()
+    }
+  })
+  held.set(connection, done)
+  return release
+}
+
 export interface AtomicOptions {
   connection?: Connection
 }
@@ -68,24 +117,39 @@ export async function atomic<T>(fn: () => Promise<T> | T, options: AtomicOptions
 
 async function sqliteAtomic<T>(connection: Connection, fn: () => Promise<T> | T): Promise<T> {
   const parent = scope.getStore()
-  const depth = parent ? parent.depth + 1 : 0
-  const savepoint = depth > 0 ? `angus_sp_${depth}` : null
-  const client = connection.client
 
-  client.exec(savepoint ? `SAVEPOINT ${savepoint}` : 'BEGIN')
-
-  try {
-    const result = await scope.run({ db: connection.db, depth }, async () => fn())
-    client.exec(savepoint ? `RELEASE ${savepoint}` : 'COMMIT')
-    return result
-  } catch (error) {
-    if (savepoint) {
+  // A nested block is a savepoint inside the parent's transaction. The parent
+  // already holds the lock, so it neither acquires it again nor issues `BEGIN`.
+  if (parent) {
+    const depth = parent.depth + 1
+    const savepoint = `angus_sp_${depth}`
+    const client = connection.client
+    client.exec(`SAVEPOINT ${savepoint}`)
+    try {
+      const result = await scope.run({ db: connection.db, depth }, async () => fn())
+      client.exec(`RELEASE ${savepoint}`)
+      return result
+    } catch (error) {
       client.exec(`ROLLBACK TO ${savepoint}`)
       client.exec(`RELEASE ${savepoint}`)
-    } else {
-      client.exec('ROLLBACK')
+      throw error
     }
+  }
+
+  // Outermost block: take the connection's transaction lock for its whole
+  // duration, so no other transaction overlaps and no stray query is captured.
+  const release = await acquireTransaction(connection)
+  const client = connection.client
+  client.exec('BEGIN')
+  try {
+    const result = await scope.run({ db: connection.db, depth: 0 }, async () => fn())
+    client.exec('COMMIT')
+    return result
+  } catch (error) {
+    client.exec('ROLLBACK')
     throw error
+  } finally {
+    release()
   }
 }
 
